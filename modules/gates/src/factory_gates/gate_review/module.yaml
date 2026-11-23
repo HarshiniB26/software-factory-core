@@ -1,0 +1,8 @@
+id: gate-review
+version: 0.1.0
+implements: QualityGate@1
+capabilities: [cross-vendor-review]
+secrets: []
+egress: []
+permissions: []
+testing: in-process

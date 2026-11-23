@@ -1,0 +1,198 @@
+[project]
+name = "factory"
+version = "0.1.0"
+description = "Autonomous software factory: a vendor-free Python core and pluggable modules."
+requires-python = ">=3.12"
+dependencies = [
+    "factory-api",
+    "factory-clarifier-default",
+    "factory-cli",
+    "factory-contract-tests",
+    "factory-eval-replay",
+    "factory-fakes",
+    "factory-gates",
+    "factory-harnesses",
+    "factory-intake-github",
+    "factory-model-litellm",
+    "factory-obs-otel",
+    "factory-orchestrator-temporal",
+    "factory-pipeline",
+    "factory-planner-default",
+    "factory-sandboxes",
+    "factory-sdk",
+    "factory-secrets-host",
+    "factory-skills-git",
+    "factory-vcs-github",
+    "factory-worker",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["apps/*", "packages/*", "modules/*"]
+
+[tool.uv.sources]
+factory-api = { workspace = true }
+factory-clarifier-default = { workspace = true }
+factory-cli = { workspace = true }
+factory-contract-tests = { workspace = true }
+factory-core = { workspace = true }
+factory-contracts = { workspace = true }
+factory-eval-replay = { workspace = true }
+factory-fakes = { workspace = true }
+factory-gates = { workspace = true }
+factory-harnesses = { workspace = true }
+factory-intake-github = { workspace = true }
+factory-model-litellm = { workspace = true }
+factory-obs-otel = { workspace = true }
+factory-orchestrator-temporal = { workspace = true }
+factory-pipeline = { workspace = true }
+factory-planner-default = { workspace = true }
+factory-sandboxes = { workspace = true }
+factory-sdk = { workspace = true }
+factory-secrets-host = { workspace = true }
+factory-skills-git = { workspace = true }
+factory-vcs-github = { workspace = true }
+factory-worker = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "aiosqlite>=0.20",
+    "httpx>=0.28",
+    "import-linter>=2.1",
+    "pyright>=1.1.390",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["apps", "packages", "modules"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = [
+    "packages/pipeline/tests",
+    "packages/core/tests",
+    "packages/contract-tests/tests",
+    "packages/sdk/tests",
+    "apps/api/tests",
+    "modules/orchestrator-temporal/tests",
+]
+
+[tool.importlinter]
+root_packages = [
+    "factory_contracts",
+    "factory_core",
+    "factory_sdk",
+    "factory_fakes",
+    "factory_orchestrator_temporal",
+    "factory_pipeline",
+    "factory_vcs_github",
+    "factory_sandboxes",
+    "factory_harnesses",
+    "factory_model_litellm",
+    "factory_clarifier_default",
+    "factory_planner_default",
+    "factory_gates",
+    "factory_skills_git",
+    "factory_eval_replay",
+    "factory_obs_otel",
+    "factory_intake_github",
+    "factory_secrets_host",
+    "factory_api",
+    "factory_worker",
+    "factory_cli",
+]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Core does not import vendor SDKs or apps"
+type = "forbidden"
+source_modules = ["factory_core"]
+forbidden_modules = [
+    "temporalio",
+    "litellm",
+    "githubkit",
+    "claude_agent_sdk",
+    "openai",
+    "modal",
+    "e2b",
+    "fastapi",
+    "sse_starlette",
+    "factory_api",
+    "factory_worker",
+    "factory_cli",
+    "factory_sdk",
+    "factory_fakes",
+    "factory_orchestrator_temporal",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Contracts stay vendor-free"
+type = "forbidden"
+source_modules = ["factory_contracts"]
+forbidden_modules = [
+    "factory_core",
+    "sqlalchemy",
+    "temporalio",
+    "litellm",
+    "githubkit",
+    "fastapi",
+    "httpx",
+    "yaml",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Modules do not import the core or apps"
+type = "forbidden"
+source_modules = [
+    "factory_fakes",
+    "factory_orchestrator_temporal",
+    "factory_vcs_github",
+    "factory_sandboxes",
+    "factory_harnesses",
+    "factory_model_litellm",
+    "factory_clarifier_default",
+    "factory_planner_default",
+    "factory_gates",
+    "factory_skills_git",
+    "factory_eval_replay",
+    "factory_obs_otel",
+    "factory_intake_github",
+    "factory_secrets_host",
+]
+forbidden_modules = [
+    "factory_core",
+    "factory_api",
+    "factory_worker",
+    "factory_cli",
+    "factory_sdk",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Fakes do not import the Temporal SDK"
+type = "forbidden"
+source_modules = ["factory_fakes"]
+forbidden_modules = ["temporalio", "litellm", "githubkit", "claude_agent_sdk", "openai"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Layers: apps, clients and modules, core, contracts"
+type = "layers"
+layers = [
+    "factory_api: factory_worker: factory_cli",
+    "factory_sdk: factory_fakes: factory_orchestrator_temporal: factory_pipeline: factory_vcs_github: factory_sandboxes: factory_harnesses: factory_model_litellm: factory_clarifier_default: factory_planner_default: factory_gates: factory_skills_git: factory_eval_replay: factory_obs_otel: factory_intake_github: factory_secrets_host",
+    "factory_core",
+    "factory_contracts",
+]

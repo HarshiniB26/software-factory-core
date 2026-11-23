@@ -1,0 +1,8 @@
+id: gate-trivy
+version: 0.1.0
+implements: QualityGate@1
+capabilities: [image-scan]
+secrets: []
+egress: []
+permissions: []
+testing: in-process

@@ -1,0 +1,11 @@
+rules:
+  - id: factory-eval
+    languages: [python]
+    severity: ERROR
+    message: eval() is not allowed
+    pattern: eval(...)
+  - id: factory-exec
+    languages: [python]
+    severity: ERROR
+    message: exec() is not allowed
+    pattern: exec(...)

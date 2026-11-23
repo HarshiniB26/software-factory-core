@@ -1,0 +1,8 @@
+id: storage-fake
+version: 0.1.0
+implements: Storage@1
+capabilities: [fake]
+secrets: []
+egress: []
+permissions: []
+testing: in-process

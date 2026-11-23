@@ -1,0 +1,8 @@
+id: sandbox-modal
+version: 0.1.0
+implements: SandboxProvider@1
+capabilities: [burst, egress-policy]
+secrets: [MODAL_TOKEN_ID, MODAL_TOKEN_SECRET]
+egress: [pypi.org, github.com]
+permissions: [spawn-sandbox]
+testing: in-process

@@ -1,0 +1,8 @@
+id: harness-codex
+version: 0.1.0
+implements: HarnessAdapter@1
+capabilities: [streaming, worktrees]
+secrets: [OPENAI_API_KEY]
+egress: [api.openai.com]
+permissions: [run-agent]
+testing: in-process

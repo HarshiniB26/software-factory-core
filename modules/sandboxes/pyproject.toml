@@ -1,0 +1,20 @@
+[project]
+name = "factory-sandboxes"
+version = "0.1.0"
+description = "Docker and Modal sandbox modules. Secrets stay on the host."
+requires-python = ">=3.12"
+dependencies = ["factory-contracts"]
+
+[project.optional-dependencies]
+modal = ["modal>=0.64"]
+
+[project.entry-points."factory.modules"]
+sandbox-docker = "factory_sandboxes.docker:DockerSandbox"
+sandbox-modal = "factory_sandboxes.modal:ModalSandbox"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/factory_sandboxes"]

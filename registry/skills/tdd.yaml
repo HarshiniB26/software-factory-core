@@ -1,0 +1,6 @@
+id: superpowers/test-driven-development
+version: 0.1.0
+source: https://github.com/obra/superpowers
+sha: "0000000000000000000000000000000000000000"
+license: MIT
+description: Example pin. Write a failing test before implementation.

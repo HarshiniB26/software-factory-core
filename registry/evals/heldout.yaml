@@ -1,0 +1,98 @@
+# Held-out seed. Promotion requires n >= 30. These tasks run against examples/sample-repo.
+tasks:
+  - id: task-01
+    expect: pass
+    prompt: Add a health endpoint that returns ok.
+  - id: task-02
+    expect: pass
+    prompt: Reject a diff that contains an AWS access key.
+  - id: task-03
+    expect: pass
+    prompt: Do not merge the pull request.
+  - id: task-04
+    expect: pass
+    prompt: Add a unit test before the implementation.
+  - id: task-05
+    expect: pass
+    prompt: Keep secrets out of the sandbox environment.
+  - id: task-06
+    expect: pass
+    prompt: Open a stacked pull request for a second step.
+  - id: task-07
+    expect: pass
+    prompt: Ask one clarifying question when the request says or.
+  - id: task-08
+    expect: pass
+    prompt: Record the chosen answer as an assumption.
+  - id: task-09
+    expect: pass
+    prompt: Score a migration step as high risk.
+  - id: task-10
+    expect: pass
+    prompt: Run semgrep on eval().
+  - id: task-11
+    expect: pass
+    prompt: Run gitleaks on a private key block.
+  - id: task-12
+    expect: pass
+    prompt: Fail the test gate when pytest fails.
+  - id: task-13
+    expect: pass
+    prompt: Pass the test gate when pytest passes.
+  - id: task-14
+    expect: pass
+    prompt: Cap parallel steps at 3.
+  - id: task-15
+    expect: pass
+    prompt: Run an exclusive migration step alone.
+  - id: task-16
+    expect: pass
+    prompt: Preview a merge conflict on the same line.
+  - id: task-17
+    expect: pass
+    prompt: Reuse an agent when coverage is at least 90 percent.
+  - id: task-18
+    expect: pass
+    prompt: Create a draft agent when no worker matches.
+  - id: task-19
+    expect: pass
+    prompt: Pin a skill at a commit sha.
+  - id: task-20
+    expect: pass
+    prompt: Reject a skill whose license is not allowlisted.
+  - id: task-21
+    expect: pass
+    prompt: Stop a run when the kill switch is on.
+  - id: task-22
+    expect: pass
+    prompt: Require an approver to accept a high risk plan.
+  - id: task-23
+    expect: pass
+    prompt: Allow a requester to create a request.
+  - id: task-24
+    expect: pass
+    prompt: Time out a parked clarification after 3 days.
+  - id: task-25
+    expect: pass
+    prompt: Follow up with also as a child request.
+  - id: task-26
+    expect: pass
+    prompt: Follow up with change as a revision of the same branch.
+  - id: task-27
+    expect: pass
+    prompt: Put the risk score in the pull request body.
+  - id: task-28
+    expect: pass
+    prompt: Use the other vendor for review.
+  - id: task-29
+    expect: pass
+    prompt: Clone the repository inside the sandbox.
+  - id: task-30
+    expect: pass
+    prompt: Push only a factory/ branch.
+  - id: task-31
+    expect: pass
+    prompt: Deny egress to an unknown host.
+  - id: task-32
+    expect: pass
+    prompt: Export an audit event for the opened pull request.

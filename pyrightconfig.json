@@ -1,0 +1,37 @@
+{
+  "include": [
+    "packages/contracts/src",
+    "packages/core/src",
+    "packages/core/tests",
+    "packages/core/migrations",
+    "packages/contract-tests/src",
+    "packages/contract-tests/tests",
+    "packages/sdk/src",
+    "packages/sdk/tests",
+    "apps/api/src",
+    "apps/api/tests",
+    "apps/worker/src",
+    "apps/cli/src",
+    "modules/fakes/src",
+    "modules/orchestrator-temporal/src"
+  ],
+  "extraPaths": [
+    "packages/contracts/src",
+    "packages/core/src",
+    "packages/contract-tests/src",
+    "packages/sdk/src",
+    "apps/api/src",
+    "apps/worker/src",
+    "apps/cli/src",
+    "modules/fakes/src",
+    "modules/orchestrator-temporal/src"
+  ],
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "strict",
+  "venvPath": ".",
+  "venv": ".venv",
+  "reportUnknownMemberType": "none",
+  "reportUnknownVariableType": "none",
+  "reportUnknownArgumentType": "none",
+  "reportUnknownLambdaType": "none"
+}

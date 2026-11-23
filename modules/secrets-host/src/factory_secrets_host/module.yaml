@@ -1,0 +1,8 @@
+id: secrets-host
+version: 0.1.0
+implements: SecretsProvider@1
+capabilities: [host-only]
+secrets: []
+egress: []
+permissions: []
+testing: in-process

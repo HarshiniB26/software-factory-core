@@ -1,0 +1,31 @@
+[project]
+name = "factory-fakes"
+version = "0.1.0"
+description = "In-process fake implementations of every factory module interface."
+requires-python = ">=3.12"
+dependencies = ["factory-contracts"]
+
+[project.entry-points."factory.modules"]
+sandbox-fake = "factory_fakes.sandbox:FakeSandboxProvider"
+harness-fake = "factory_fakes.harness:FakeHarnessAdapter"
+storage-fake = "factory_fakes.storage:FakeStorage"
+orchestrator-fake = "factory_fakes.orchestrator:FakeOrchestrator"
+intake-fake = "factory_fakes.intake:FakeIntake"
+notifier-fake = "factory_fakes.notifier:FakeNotifier"
+clarifier-fake = "factory_fakes.clarifier:FakeClarifier"
+planner-fake = "factory_fakes.planner:FakePlanner"
+model-fake = "factory_fakes.model:FakeModelProvider"
+vcs-fake = "factory_fakes.vcs:FakeVcs"
+gate-fake = "factory_fakes.gate:FakeGate"
+skills-fake = "factory_fakes.skills:FakeSkillSource"
+eval-fake = "factory_fakes.eval:FakeEvalRunner"
+obs-fake = "factory_fakes.observability:FakeObservability"
+auth-fake = "factory_fakes.auth:FakeAuth"
+secrets-fake = "factory_fakes.secrets:FakeSecrets"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/factory_fakes"]

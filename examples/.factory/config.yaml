@@ -1,0 +1,31 @@
+# Example repo config. Copy to <target-repo>/.factory/config.yaml.
+# Precedence: run override, then this file, then org, then built-in defaults.
+modules:
+  orchestrator: orchestrator-temporal
+  storage: storage-fake
+  sandbox: sandbox-fake
+  harness:
+    - harness-fake
+  gates:
+    - gate-fake
+  intake:
+    - intake-fake
+  notifier: notifier-fake
+  model: model-fake
+  vcs: vcs-fake
+  skills: skills-fake
+  eval: eval-fake
+  observability: obs-fake
+  auth: auth-fake
+  secrets: secrets-fake
+  clarifier: clarifier-fake
+  planner: planner-fake
+flags:
+  parallel_steps: 3
+  clarifier_v2: false
+  plan_approval: high_risk
+budgets:
+  per_run_usd: 8
+module_config:
+  sandbox-fake:
+    image: fake

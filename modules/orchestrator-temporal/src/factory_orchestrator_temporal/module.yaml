@@ -1,0 +1,8 @@
+id: orchestrator-temporal
+version: 0.1.0
+implements: Orchestrator@1
+capabilities: [durable-workflows]
+secrets: []
+egress: []
+permissions: [start-workflow]
+testing: external

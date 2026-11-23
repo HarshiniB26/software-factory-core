@@ -1,0 +1,8 @@
+id: intake-github-issues
+version: 0.1.0
+implements: IntakeSource@1
+capabilities: [issues, label-factory]
+secrets: []
+egress: [api.github.com]
+permissions: [issues:write]
+testing: in-process

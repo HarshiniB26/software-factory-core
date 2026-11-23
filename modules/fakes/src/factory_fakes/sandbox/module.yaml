@@ -1,0 +1,9 @@
+id: sandbox-fake
+version: 0.1.0
+implements: SandboxProvider@1
+capabilities: [fake]
+config_schema: ./config.schema.json
+secrets: []
+egress: []
+permissions: []
+testing: in-process

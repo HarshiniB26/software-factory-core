@@ -1,0 +1,8 @@
+id: harness-claude-code
+version: 0.1.0
+implements: HarnessAdapter@1
+capabilities: [streaming, worktrees]
+secrets: [ANTHROPIC_API_KEY]
+egress: [api.anthropic.com]
+permissions: [run-agent]
+testing: in-process

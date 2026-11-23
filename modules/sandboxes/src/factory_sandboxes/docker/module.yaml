@@ -1,0 +1,8 @@
+id: sandbox-docker
+version: 0.1.0
+implements: SandboxProvider@1
+capabilities: [clone-mode, egress-policy, host-secrets]
+secrets: []
+egress: [pypi.org, files.pythonhosted.org, github.com]
+permissions: [spawn-sandbox]
+testing: in-process

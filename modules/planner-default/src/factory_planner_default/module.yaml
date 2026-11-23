@@ -1,0 +1,8 @@
+id: planner-default
+version: 0.1.0
+implements: Planner@1
+capabilities: [task-dag, touch-sets]
+secrets: []
+egress: []
+permissions: []
+testing: in-process

@@ -1,0 +1,8 @@
+id: model-litellm
+version: 0.1.0
+implements: ModelProvider@1
+capabilities: [routing, budgets]
+secrets: [FACTORY_LITELLM_API_KEY]
+egress: []
+permissions: [call-model]
+testing: in-process

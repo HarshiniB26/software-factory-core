@@ -1,0 +1,8 @@
+id: gate-gitleaks
+version: 0.1.0
+implements: QualityGate@1
+capabilities: [secrets-scan]
+secrets: []
+egress: []
+permissions: []
+testing: in-process

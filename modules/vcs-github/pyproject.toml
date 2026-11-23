@@ -1,0 +1,16 @@
+[project]
+name = "factory-vcs-github"
+version = "0.1.0"
+description = "GitHub App VcsProvider. Opens pull requests and never merges them."
+requires-python = ">=3.12"
+dependencies = ["factory-contracts", "githubkit>=0.12"]
+
+[project.entry-points."factory.modules"]
+vcs-github = "factory_vcs_github:GitHubVcs"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/factory_vcs_github"]

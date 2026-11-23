@@ -1,0 +1,8 @@
+id: gate-semgrep
+version: 0.1.0
+implements: QualityGate@1
+capabilities: [sast]
+secrets: []
+egress: []
+permissions: []
+testing: in-process

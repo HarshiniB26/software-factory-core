@@ -1,0 +1,8 @@
+id: vcs-github
+version: 0.1.0
+implements: VcsProvider@1
+capabilities: [github-app, least-privilege, never-merge]
+secrets: [GITHUB_APP_PRIVATE_KEY]
+egress: [github.com, api.github.com]
+permissions: [contents:write, pull-requests:write]
+testing: in-process

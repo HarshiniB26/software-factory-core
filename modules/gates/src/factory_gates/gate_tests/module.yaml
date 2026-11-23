@@ -1,0 +1,8 @@
+id: gate-tests
+version: 0.1.0
+implements: QualityGate@1
+capabilities: [tests]
+secrets: []
+egress: []
+permissions: []
+testing: in-process

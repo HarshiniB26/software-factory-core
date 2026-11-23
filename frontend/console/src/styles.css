@@ -1,0 +1,24 @@
+:root {
+  color: #1c1917;
+  background: #f6f3ee;
+  font-family: "Iowan Old Style", Palatino, Georgia, serif;
+}
+body { margin: 0; }
+button, input, textarea, select { font: inherit; }
+.app { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+nav { padding: 1.25rem; background: #231f1c; color: #f6f3ee; }
+nav button { display: block; width: 100%; text-align: left; margin: 0.25rem 0; background: transparent; color: inherit; border: 0; padding: 0.4rem 0.2rem; cursor: pointer; }
+nav button.active { color: #e7b15a; }
+main { padding: 1.5rem 2rem; }
+.card { background: white; border: 1px solid #e4ddd2; border-radius: 12px; padding: 1rem; margin: 0.75rem 0; }
+.row { display: flex; gap: 0.5rem; align-items: center; }
+textarea, input, select { width: 100%; box-sizing: border-box; padding: 0.5rem; border: 1px solid #d9d0c3; border-radius: 8px; }
+.thread { display: flex; flex-direction: column; gap: 0.5rem; }
+.bubble { max-width: 40rem; padding: 0.7rem 0.9rem; border-radius: 12px; }
+.user { align-self: flex-end; background: #231f1c; color: white; }
+.assistant { align-self: flex-start; background: white; border: 1px solid #e4ddd2; }
+.kind { font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; color: #8a8175; }
+@media (max-width: 800px) {
+  .app { grid-template-columns: 1fr; }
+  nav { display: flex; gap: 0.5rem; overflow: auto; }
+}

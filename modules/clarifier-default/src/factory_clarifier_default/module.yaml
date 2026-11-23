@@ -1,0 +1,8 @@
+id: clarifier-default
+version: 0.1.0
+implements: Clarifier@1
+capabilities: [questions, assumptions]
+secrets: []
+egress: []
+permissions: []
+testing: in-process

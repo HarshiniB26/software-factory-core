@@ -1,0 +1,8 @@
+id: skills-git
+version: 0.1.0
+implements: SkillSource@1
+capabilities: [pin, scan, license-allowlist]
+secrets: []
+egress: [github.com]
+permissions: []
+testing: in-process

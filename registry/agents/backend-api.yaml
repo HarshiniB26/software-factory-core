@@ -1,0 +1,35 @@
+id: agent.backend-api
+version: 3.2.0
+status: active
+lineage:
+  parent: agent.backend-api@3.1.0
+  reason: add pagination skill
+capabilities:
+  - api-design
+  - http-handlers
+  - db-migrations
+skills:
+  - superpowers/test-driven-development@example
+  - pstack/architect@example
+  - internal/api-conventions@1.4.0
+tools:
+  allow:
+    - shell
+    - git
+    - editor
+    - test-runner
+  network: registries-only
+models:
+  tier: frontier-coding
+  harness:
+    - claude-code
+    - codex
+  reviewer_vendor: different
+budgets:
+  usd: 8
+  wall_minutes: 60
+evals:
+  suite: backend-api@v4
+  pass_rate: 0.78
+  cost_per_task_usd: 2.1
+  n: 120
