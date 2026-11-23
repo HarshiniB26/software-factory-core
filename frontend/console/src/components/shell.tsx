@@ -5,7 +5,9 @@ import { formatWhen } from "@/lib/format";
 import { useTheme } from "@/lib/theme";
 import type { Principal, Repo, RequestRow } from "@/lib/types";
 import {
+  CircleDollarSign,
   FolderGit2,
+  Inbox,
   Library,
   Menu,
   Moon,
@@ -92,8 +94,8 @@ export function Shell() {
 
   return (
     <SessionContext.Provider value={session}>
-      <div className="flex h-screen overflow-hidden bg-zinc-50 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50">
-        <aside className="hidden h-screen w-64 shrink-0 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950 md:flex">
+      <div className="flex h-screen overflow-hidden bg-transparent text-[var(--ink)]">
+        <aside className="hidden h-screen w-64 shrink-0 flex-col border-r border-[var(--line)] bg-[var(--card)] md:flex">
           <Sidebar
             connected={connected}
             runs={runs}
@@ -104,7 +106,7 @@ export function Shell() {
           />
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-14 items-center gap-2 border-b border-zinc-200 px-3 dark:border-zinc-800 md:hidden">
+          <header className="flex h-14 items-center gap-2 border-b border-[var(--line)] px-3 md:hidden">
             <Button variant="ghost" size="icon" aria-label="Open menu" onClick={() => setMenu(true)}>
               <Menu className="h-4 w-4" />
             </Button>
@@ -116,7 +118,7 @@ export function Shell() {
         </div>
         {menu ? (
           <div className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setMenu(false)}>
-            <div className="h-full w-72 bg-white p-2 dark:bg-zinc-950" onClick={(event) => event.stopPropagation()}>
+            <div className="h-full w-72 bg-[var(--card)] p-2" onClick={(event) => event.stopPropagation()}>
               <Sidebar
                 connected={connected}
                 runs={runs}
@@ -174,11 +176,12 @@ function Sidebar({
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 px-3 py-4">
-        <span className="grid h-7 w-7 place-items-center rounded-md bg-zinc-950 text-xs font-semibold text-white dark:bg-white dark:text-zinc-950">
-          F
+        <span className="relative grid h-8 w-8 place-items-center">
+          <span className="absolute h-7 w-7 rounded-full bg-[var(--accent)] opacity-90" />
+          <span className="absolute h-5 w-5 translate-x-1 rounded-full bg-[var(--accent-2)] opacity-90" />
         </span>
         <div>
-          <p className="text-sm font-semibold leading-none">Factory</p>
+          <p className="wordmark text-sm font-semibold leading-none tracking-tight">Factory</p>
           <p className="mt-1 text-xs text-zinc-500">{principal?.id ?? "signed out"}</p>
         </div>
       </div>
@@ -191,13 +194,17 @@ function Sidebar({
       </button>
       <nav className="mt-3 space-y-0.5 px-2">
         <Item to="/" label="New issue" icon={<Plus className="h-4 w-4" />} end onNavigate={onNavigate} />
+        <Item to="/board" label="Board" icon={<ScrollText className="h-4 w-4" />} onNavigate={onNavigate} />
+        <Item to="/inbox" label="Inbox" icon={<Inbox className="h-4 w-4" />} onNavigate={onNavigate} />
         <Item to="/runs" label="Runs" icon={<ScrollText className="h-4 w-4" />} onNavigate={onNavigate} />
         <Item to="/registry" label="Registry" icon={<Library className="h-4 w-4" />} onNavigate={onNavigate} />
+        <Item to="/repos" label="Repositories" icon={<FolderGit2 className="h-4 w-4" />} onNavigate={onNavigate} />
+        <Item to="/cost" label="Usage" icon={<CircleDollarSign className="h-4 w-4" />} onNavigate={onNavigate} />
         <Item to="/settings" label="Settings" icon={<Settings className="h-4 w-4" />} onNavigate={onNavigate} />
       </nav>
       <div className="mt-4 min-h-0 flex-1 overflow-auto px-2">
         <p className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-zinc-400">Recent</p>
-        {runs.slice(0, 8).map((run) => (
+        {distinct(runs).map((run) => (
           <NavLink
             key={run.id}
             to={`/runs/${run.id}`}
@@ -218,6 +225,18 @@ function Sidebar({
       </div>
     </div>
   );
+}
+
+function distinct(runs: RequestRow[]) {
+  const seen = new Set<string>();
+  const picked: RequestRow[] = [];
+  for (const run of runs) {
+    if (seen.has(run.title)) continue;
+    seen.add(run.title);
+    picked.push(run);
+    if (picked.length === 6) break;
+  }
+  return picked;
 }
 
 function Item({
@@ -241,7 +260,7 @@ function Item({
       className={({ isActive }) =>
         cn(
           "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
-          isActive ? "bg-zinc-100 font-medium dark:bg-zinc-900" : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900",
+          isActive ? "bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] font-medium text-[var(--ink)]" : "text-zinc-600 hover:bg-black/5 dark:text-zinc-400 dark:hover:bg-white/5",
         )
       }
     >
@@ -254,8 +273,12 @@ function Item({
 function Palette({ onClose, onPick }: { onClose: () => void; onPick: (path: string) => void }) {
   const actions = [
     ["compose", "Describe an issue"],
+    ["/board", "Go to the board"],
+    ["/inbox", "Go to the inbox"],
     ["/runs", "Go to runs"],
     ["/registry", "Go to registry"],
+    ["/repos", "Go to repositories"],
+    ["/cost", "Go to usage"],
     ["/settings", "Go to settings"],
     ["connect", "Connect a repository"],
     ["theme", "Toggle theme"],

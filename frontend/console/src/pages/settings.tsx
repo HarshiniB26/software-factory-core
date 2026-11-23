@@ -4,6 +4,7 @@ import { useSession } from "@/components/shell";
 import { api } from "@/lib/api";
 import { money } from "@/lib/format";
 import { useTheme } from "@/lib/theme";
+import type { WorkspaceSettings } from "@/lib/types";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -16,15 +17,17 @@ export function SettingsPage() {
   const [killed, setKilled] = useState(false);
   const [confirmKill, setConfirmKill] = useState(false);
   const [user, setUser] = useState("");
+  const [workspace, setWorkspace] = useState<WorkspaceSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([api.modules(), api.cost(), api.audit()])
-      .then(([moduleList, spend, audit]) => {
+    Promise.all([api.modules(), api.cost(), api.audit(), api.settings()])
+      .then(([moduleList, spend, audit, settings]) => {
         setModules(moduleList.installed);
         setSelected(moduleList.selected);
         setCost(spend);
         setKilled(audit.kill_switch);
+        setWorkspace(settings);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not load settings"));
   }, []);
@@ -52,6 +55,63 @@ export function SettingsPage() {
         <Button className="mt-3" variant="secondary" onClick={toggle}>
           Use {theme === "dark" ? "light" : "dark"} theme
         </Button>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="text-sm font-medium">Roles</h2>
+        <p className="mt-1 text-sm text-zinc-500">Harness and model shown on each agent card. Dev mode still runs locally, without a live key.</p>
+        {workspace ? (
+          <form
+            className="mt-3 space-y-3"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              const saved = await api.saveSettings(workspace);
+              setWorkspace(saved);
+              toast.success("Settings saved");
+            }}
+          >
+            <label className="block text-sm">
+              Plan approval
+              <select
+                value={workspace.plan_approval}
+                onChange={(event) => setWorkspace({ ...workspace, plan_approval: event.target.value })}
+                className="mt-1 h-9 w-full rounded-md border border-zinc-200 bg-transparent px-2 dark:border-zinc-800"
+              >
+                <option value="high_risk">High risk only</option>
+                <option value="always">Always</option>
+                <option value="never">Never</option>
+              </select>
+            </label>
+            {Object.entries(workspace.roles).map(([role, choice]) => (
+              <div key={role} className="grid gap-2 sm:grid-cols-3">
+                <p className="self-center text-sm capitalize">{role}</p>
+                <input
+                  value={choice.harness}
+                  onChange={(event) =>
+                    setWorkspace({
+                      ...workspace,
+                      roles: { ...workspace.roles, [role]: { ...choice, harness: event.target.value } },
+                    })
+                  }
+                  className="h-9 rounded-md border border-zinc-200 bg-transparent px-2 text-sm dark:border-zinc-800"
+                />
+                <input
+                  value={choice.model}
+                  onChange={(event) =>
+                    setWorkspace({
+                      ...workspace,
+                      roles: { ...workspace.roles, [role]: { ...choice, model: event.target.value } },
+                    })
+                  }
+                  className="h-9 rounded-md border border-zinc-200 bg-transparent px-2 text-sm dark:border-zinc-800"
+                />
+              </div>
+            ))}
+            <Button type="submit">Save settings</Button>
+          </form>
+        ) : (
+          <div className="mt-3 h-24 animate-pulse rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+        )}
       </section>
 
       <section className="mt-8">

@@ -1,6 +1,17 @@
 import type { paths } from "./schema";
 import createClient from "openapi-fetch";
-import { ApiError, type Principal, type Repo, type RequestRow, type RunView } from "./types";
+import {
+  ApiError,
+  type AgentCard,
+  type CostReport,
+  type Principal,
+  type Repo,
+  type RequestRow,
+  type RunView,
+  type BoardCard,
+  type InboxItem,
+  type WorkspaceSettings,
+} from "./types";
 
 const raw = createClient<paths>({ baseUrl: "/api" });
 
@@ -70,7 +81,8 @@ export const api = {
         headers: authHeaders(),
       }),
     ),
-  inbox: () => unwrap<{ items: RequestRow[] }>(raw.GET("/inbox", { headers: authHeaders() })),
+  inbox: () => unwrap<{ items: InboxItem[] }>(raw.GET("/inbox", { headers: authHeaders() })),
+  board: () => unwrap<{ items: BoardCard[] }>(raw.GET("/board", { headers: authHeaders() })),
   prs: () => unwrap<{ items: { url: string; risk: string; number: number; request_id: string; title?: string; head?: string; base?: string; repo?: string }[] }>(raw.GET("/prs", { headers: authHeaders() })),
   modules: () =>
     unwrap<{
@@ -86,7 +98,18 @@ export const api = {
     unwrap<{ skills: { id: string; version: string; license: string }[] }>(
       raw.GET("/registry/skills", { headers: authHeaders() }),
     ),
-  cost: () => unwrap<{ pull_requests: number; estimated_usd: number }>(raw.GET("/cost", { headers: authHeaders() })),
+  cost: () => unwrap<CostReport>(raw.GET("/cost", { headers: authHeaders() })),
+  settings: () => unwrap<WorkspaceSettings>(raw.GET("/settings", { headers: authHeaders() })),
+  saveSettings: (body: WorkspaceSettings) =>
+    unwrap<WorkspaceSettings>(raw.PUT("/settings", { body, headers: authHeaders() })),
+  promote: (id: string, version: string) =>
+    unwrap<{ allowed: boolean; reason: string }>(
+      raw.POST("/registry/promote", { body: { id, version }, headers: authHeaders() }),
+    ),
+  catalog: () =>
+    unwrap<{ agents: { id: string; version: string; status: string; capabilities: string[] }[]; catalog: AgentCard[] }>(
+      raw.GET("/registry/agents", { headers: authHeaders() }),
+    ),
   audit: () =>
     unwrap<{ events: { type: string; created_at: string; request_id: string }[]; kill_switch: boolean }>(
       raw.GET("/audit", { headers: authHeaders() }),

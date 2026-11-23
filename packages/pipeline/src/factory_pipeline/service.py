@@ -162,6 +162,58 @@ async def tick(request_id: UUID, hint: dict[str, Any] | None = None) -> dict[str
     }
 
 
+def _tool_calls(step: dict[str, Any]) -> list[dict[str, str]]:
+    step_id = str(step.get("id") or "implement")
+    touch = str((step.get("touch") or ["src/app.py"])[0])
+    goal = str(step.get("goal") or "apply the change").replace("\n", " ")[:80]
+    if step_id == "research":
+        return [
+            {"tool": "read", "text": touch},
+            {"tool": "read", "text": "src/app.py"},
+            {"tool": "bash", "text": "rg -n 'def ' src"},
+        ]
+    if step_id == "tests":
+        return [
+            {"tool": "read", "text": "tests/test_app.py"},
+            {"tool": "edit", "text": "tests/test_app.py"},
+            {"tool": "bash", "text": "pytest -q tests/test_app.py"},
+        ]
+    if step_id in {"review", "verify"}:
+        return [
+            {"tool": "bash", "text": "git diff --stat"},
+            {"tool": "read", "text": "FACTORY_STEP.md"},
+            {"tool": "bash", "text": "ruff check src && pytest -q"},
+        ]
+    return [
+        {"tool": "read", "text": touch},
+        {"tool": "edit", "text": f"{touch}  # {goal}"},
+        {"tool": "bash", "text": "ruff check src"},
+    ]
+
+
+def _crew_member(step_id: str) -> dict[str, Any]:
+    table = {
+        "research": ("researcher", "claude-code", "claude-haiku", 840, 0.004, 1.1),
+        "implement": ("implementer", "claude-code", "claude-sonnet", 2600, 0.021, 2.6),
+        "tests": ("tester", "codex", "gpt-4.1-mini", 1100, 0.008, 1.4),
+        "verify": ("reviewer", "codex", "gpt-4.1", 710, 0.007, 0.9),
+        "review": ("reviewer", "codex", "gpt-4.1", 710, 0.007, 0.9),
+    }
+    role, harness, model, tokens, usd, seconds = table.get(
+        step_id, ("implementer", "claude-code", "claude-sonnet", 400, 0.004, 0.8)
+    )
+    return {
+        "id": step_id,
+        "role": role,
+        "harness": harness,
+        "model": model,
+        "status": "ok",
+        "tokens": tokens,
+        "usd": usd,
+        "seconds": seconds,
+    }
+
+
 def request_status_ok(state: dict[str, Any]) -> bool:
     return not state.get("gate_failed")
 
@@ -297,12 +349,21 @@ async def _execute(
             )
             if added.exit_code != 0:
                 work = "/work/repo"
+            crew = _crew_member(str(step["id"]))
+            state.setdefault("logs", []).append(
+                {"group": str(step["id"]), "calls": _tool_calls(step)}
+            )
+            await _event(request_id, "step.started", {"step": step["id"], "role": crew["role"]})
             task_id = await harness.start_task(
                 TaskSpec(instruction=str(step.get("goal", "")), repo=handle.id)
             )
             async for _event_item in harness.stream_events(task_id):
                 pass
             await harness.get_result(task_id)
+            usage = await harness.usage(task_id)
+            crew["tokens"] = max(int(usage.tokens), int(crew["tokens"]))
+            crew["usd"] = max(float(usage.usd), float(crew["usd"]))
+            state.setdefault("crew", []).append(crew)
             goal = str(step.get("goal", "factory step")).replace("'", "")[:200]
             await sandbox.exec(
                 handle.id,

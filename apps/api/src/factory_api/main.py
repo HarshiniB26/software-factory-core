@@ -73,6 +73,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         app.state.database = await connect(settings.database_url, settings.blob_root)
         owns_database = True
     set_database(app.state.database)
+    from factory_api.demo_seed import seed_demo_if_local
+
+    await seed_demo_if_local(app.state.database, settings.database_url)
     if getattr(app.state, "orchestrator", None) is None:
         app.state.orchestrator = await build_orchestrator(settings)
     try:
@@ -95,6 +98,15 @@ async def create_request(body: RequestCreate, request: Request) -> FactoryReques
     database: Database = request.app.state.database
     orchestrator: Orchestrator = request.app.state.orchestrator
     settings = Settings()
+    stored = await database.get_state("console.settings") or {}
+    overrides = dict(body.overrides or {})
+    flags = dict(overrides.get("flags") or {})
+    approval = stored.get("plan_approval")
+    if isinstance(approval, str) and "plan_approval" not in flags:
+        flags["plan_approval"] = approval
+    if flags:
+        overrides["flags"] = flags
+        body = body.model_copy(update={"overrides": overrides})
     try:
         config = resolve_config(
             settings.repo_root,

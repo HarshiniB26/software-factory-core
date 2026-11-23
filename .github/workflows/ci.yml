@@ -26,6 +26,14 @@ jobs:
       FACTORY_TEST_POSTGRES: "1"
     steps:
       - uses: actions/checkout@v4
+      - name: Fail if a .env file is tracked
+        run: |
+          tracked=$(git ls-files | grep -E '(^|/)\.env($|\.)' | grep -vE '(^|/)\.env\.example$' || true)
+          if [ -n "$tracked" ]; then
+            echo "Tracked .env files are not allowed:"
+            echo "$tracked"
+            exit 1
+          fi
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"

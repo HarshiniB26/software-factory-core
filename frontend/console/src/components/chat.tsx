@@ -4,13 +4,21 @@ import {
   MessagePrimitive,
   ThreadPrimitive,
   useAssistantState,
+  useComposerRuntime,
   useLocalRuntime,
   type ChatModelAdapter,
 } from "@assistant-ui/react";
 import { RunPanel } from "@/components/run-panel";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { motion } from "framer-motion";
 import { ArrowUp } from "lucide-react";
+
+const SUGGESTIONS = [
+  "Show coupon expiry in the cart",
+  "Add Apple Pay to the receipt sheet",
+  "Split the checkout form into two steps",
+];
 
 const bridge: { target: () => Promise<string | null>; refresh: () => Promise<void> } = {
   target: async () => null,
@@ -52,12 +60,7 @@ export function ChatThread() {
         <ThreadPrimitive.Viewport className="min-h-0 flex-1 overflow-auto px-4 py-8">
           <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
             <ThreadPrimitive.Empty>
-              <div className="flex min-h-[50vh] flex-col justify-center">
-                <h1 className="text-3xl font-semibold tracking-tight">What should we change?</h1>
-                <p className="mt-3 max-w-lg text-sm leading-6 text-zinc-500">
-                  Describe the issue. The run plans the work, checks it, and opens a pull request. It never merges.
-                </p>
-              </div>
+              <EmptyState />
             </ThreadPrimitive.Empty>
             <ThreadPrimitive.Messages
               components={{
@@ -68,14 +71,14 @@ export function ChatThread() {
           </div>
         </ThreadPrimitive.Viewport>
         <div className="px-4 pb-4">
-          <ComposerPrimitive.Root className="mx-auto flex w-full max-w-3xl items-end gap-2 rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <ComposerPrimitive.Root className="surface mx-auto flex w-full max-w-3xl items-end gap-2 rounded-2xl p-2">
             <ComposerPrimitive.Input
               data-composer
               placeholder="Describe the issue"
               className="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none"
             />
             <ComposerPrimitive.Send asChild>
-              <Button size="icon" aria-label="Send" className="bg-zinc-950 text-white hover:bg-zinc-800">
+              <Button size="icon" aria-label="Send">
                 <ArrowUp className="h-4 w-4" />
               </Button>
             </ComposerPrimitive.Send>
@@ -87,9 +90,39 @@ export function ChatThread() {
   );
 }
 
+function EmptyState() {
+  const composer = useComposerRuntime();
+  return (
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex min-h-[46vh] flex-col justify-center">
+      <div className="mb-5 flex items-center gap-3">
+        <span className="relative grid h-10 w-10 place-items-center">
+          <span className="absolute h-9 w-9 rounded-full bg-[var(--accent)]" />
+          <span className="absolute h-6 w-6 translate-x-1.5 rounded-full bg-[var(--accent-2)]" />
+        </span>
+        <p className="wordmark text-sm font-semibold tracking-tight">Factory</p>
+      </div>
+      <h1 className="wordmark text-4xl font-semibold tracking-tight">What should we change?</h1>
+      <p className="mt-3 max-w-lg text-sm leading-6 text-zinc-500">
+        Describe the issue. A crew plans the work, checks it, and opens a pull request. It never merges.
+      </p>
+      <div className="mt-6 flex flex-wrap gap-2">
+        {SUGGESTIONS.map((text) => (
+          <button
+            key={text}
+            className="surface rounded-full px-3 py-1.5 text-left text-sm hover:border-[var(--accent)]"
+            onClick={() => composer.setText(text)}
+          >
+            {text}
+          </button>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
 function UserBubble() {
   return (
-    <div className="ml-auto max-w-[85%] rounded-2xl bg-zinc-950 px-4 py-2.5 text-sm text-white dark:bg-zinc-100 dark:text-zinc-950">
+    <div className="ml-auto max-w-[85%] rounded-2xl bg-[var(--accent)] px-4 py-2.5 text-sm text-white">
       <MessagePrimitive.Content />
     </div>
   );

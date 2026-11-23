@@ -49,6 +49,31 @@ export type Pull = {
 
 export type GateReport = { verdict?: string; findings?: string[]; gate?: string };
 
+export type CrewMember = {
+  id: string;
+  role: string;
+  harness: string;
+  model: string;
+  status: string;
+  tokens: number;
+  usd: number;
+  seconds: number;
+};
+
+export type RepoFile = {
+  path: string;
+  status: string;
+  original: string;
+  modified: string;
+};
+
+export type PlanStep = {
+  id?: string;
+  goal?: string;
+  depends_on?: string[];
+  touch?: string[];
+};
+
 export type RunView = {
   request: RequestRow;
   messages: ThreadMessage[];
@@ -63,7 +88,64 @@ export type RunView = {
   assumptions: string[];
   questions: { text?: string; options?: string[]; default?: string }[];
   stage: string | null;
+  steps: PlanStep[];
+  crew: CrewMember[];
+  logs: Array<string | { group: string; calls: { tool: string; text: string }[] }>;
+  files: RepoFile[];
 };
+
+export type RoleSetting = { harness: string; model: string };
+
+export type WorkspaceSettings = {
+  plan_approval: string;
+  roles: Record<string, RoleSetting>;
+};
+
+export type AgentCard = {
+  id: string;
+  version: string;
+  status: string;
+  parent?: string;
+  pass_rate?: number;
+  n?: number;
+  cost_per_task_usd?: number;
+  promotions?: { version: string; result: string; reason: string }[];
+};
+
+export type CostPoint = {
+  date: string;
+  usd: number;
+  completed: number;
+  failed: number;
+  running: number;
+  parked: number;
+  other: number;
+  success_rate: number;
+  average_duration_seconds: number;
+};
+
+export type CostReport = {
+  pull_requests: number;
+  estimated_usd: number;
+  series: CostPoint[];
+  success_rate: number;
+  average_duration_seconds: number;
+  by_role: { role: string; usd: number }[];
+};
+
+export type BoardCard = {
+  id: string;
+  title: string;
+  status: string;
+  stage: string;
+  target: string | null;
+  created_at: string;
+  cost_usd: number;
+  duration_seconds: number;
+  model: string | null;
+};
+
+export type InboxItem = RequestRow & { question?: string; kind?: string };
 
 export class ApiError extends Error {
   status: number;

@@ -3,8 +3,12 @@ import { ThemeProvider } from "@/lib/theme";
 import { Component, type ReactNode } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster } from "sonner";
+import { BoardPage } from "@/pages/board";
+import { CostPage } from "@/pages/cost";
 import { HomePage } from "@/pages/home";
+import { InboxPage } from "@/pages/inbox";
 import { RegistryPage } from "@/pages/registry";
+import { ReposPage } from "@/pages/repos";
 import { RunPage } from "@/pages/run";
 import { RunsPage } from "@/pages/runs";
 import { SettingsPage } from "@/pages/settings";
@@ -17,9 +21,13 @@ export function App() {
           <Routes>
             <Route element={<Shell />}>
               <Route index element={<HomePage />} />
+              <Route path="board" element={<BoardPage />} />
+              <Route path="inbox" element={<InboxPage />} />
               <Route path="runs" element={<RunsPage />} />
               <Route path="runs/:id" element={<RunPage />} />
               <Route path="registry" element={<RegistryPage />} />
+              <Route path="repos" element={<ReposPage />} />
+              <Route path="cost" element={<CostPage />} />
               <Route path="settings" element={<SettingsPage />} />
             </Route>
           </Routes>

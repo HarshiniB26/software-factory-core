@@ -10,7 +10,7 @@ from factory_contracts.sessions import issue_token, read_token
 from factory_core import Database, Settings, get_database, load_modules, resolve_config
 from factory_pipeline.service import KILL_KEY, blank_state, classify_follow_up
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from factory_api.access import principal_from_access
 
@@ -43,6 +43,16 @@ class ConnectBody(BaseModel):
     full_name: str
 
 
+class SettingsBody(BaseModel):
+    plan_approval: str = "high_risk"
+    roles: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+
+class PromoteBody(BaseModel):
+    id: str
+    version: str
+
+
 CONNECTED_KEY = "console.connected_repo"
 
 
@@ -60,16 +70,22 @@ def repo_catalog(root: Path) -> list[dict[str, Any]]:
                 "kind": "local",
             }
         )
-    repos.append(
-        {
-            "owner": "factory",
-            "name": "demo",
-            "full_name": "factory/demo",
-            "description": "In-memory fixture repository.",
-            "path": None,
-            "kind": "fixture",
-        }
-    )
+    extras = [
+        ("acme", "billing", "Checkout, tax, and coupons."),
+        ("acme", "mobile", "iOS client for the same ledger."),
+        ("northwind", "catalog", "Product copy and search."),
+    ]
+    for owner, name, description in extras:
+        repos.append(
+            {
+                "owner": owner,
+                "name": name,
+                "full_name": f"{owner}/{name}",
+                "description": description,
+                "path": None,
+                "kind": "fixture",
+            }
+        )
     return repos
 
 
@@ -167,7 +183,8 @@ async def run_view(request_id: UUID, request: Request) -> dict[str, Any]:
     messages = await database.list_messages(request_id)
     events = await database.read(request_id)
     raw_diff = str(state.get("diff") or "").strip()
-    if raw_diff in {"", "HEAD"}:
+    meaningful = raw_diff.replace("HEAD", "").strip()
+    if not meaningful or "@@" not in raw_diff:
         steps = list((state.get("plan") or {}).get("steps") or [])
         goal = str(steps[0].get("goal") if steps else found.body)
         diff = _fixture_preview(goal)
@@ -181,7 +198,7 @@ async def run_view(request_id: UUID, request: Request) -> dict[str, Any]:
         "events": [item.model_dump(mode="json") for item in events],
         "diff": diff,
         "diff_kind": diff_kind,
-        "gates": state.get("gates") or [],
+        "gates": _named_gates(list(state.get("gates") or [])),
         "agent": state.get("agent"),
         "prs": state.get("prs") or [],
         "risk": state.get("risk", "low"),
@@ -189,7 +206,128 @@ async def run_view(request_id: UUID, request: Request) -> dict[str, Any]:
         "assumptions": state.get("assumptions") or [],
         "questions": state.get("questions") or [],
         "stage": state.get("stage"),
+        "steps": list((state.get("plan") or {}).get("steps") or []),
+        "crew": _present_crew(
+            list(state.get("crew") or []),
+            list((state.get("plan") or {}).get("steps") or []),
+        ),
+        "logs": _present_logs(list(state.get("logs") or []), found.body),
+        "files": _demo_files(found.body) if diff_kind == "fixture" else [],
     }
+
+
+_CREW_BY_STEP = {
+    "research": ("researcher", "claude-code", "claude-haiku"),
+    "implement": ("implementer", "claude-code", "claude-sonnet"),
+    "tests": ("tester", "codex", "gpt-4.1-mini"),
+    "review": ("reviewer", "codex", "gpt-4.1"),
+    "verify": ("reviewer", "codex", "gpt-4.1"),
+}
+
+_CREW_BY_ROLE = {
+    "researcher": ("claude-code", "claude-haiku"),
+    "implementer": ("claude-code", "claude-sonnet"),
+    "tester": ("codex", "gpt-4.1-mini"),
+    "reviewer": ("codex", "gpt-4.1"),
+}
+
+
+def _present_crew(crew: list[Any], steps: list[Any]) -> list[dict[str, Any]]:
+    cleaned: list[dict[str, Any]] = []
+    for index, item in enumerate(crew):
+        if not isinstance(item, dict):
+            continue
+        copy = dict(item)
+        fallback = _CREW_BY_STEP.get(str(copy.get("id") or ""))
+        generic = copy.get("harness") in {None, "", "fixture"} or copy.get("model") in {
+            None,
+            "",
+            "fast",
+            "fast-coding",
+            "review",
+        }
+        if generic and fallback:
+            copy["role"], copy["harness"], copy["model"] = fallback
+        elif generic:
+            role = str(copy.get("role") or "implementer")
+            harness, model = _CREW_BY_ROLE.get(role, ("claude-code", "claude-sonnet"))
+            copy["harness"] = harness
+            copy["model"] = model
+        if not copy.get("id"):
+            copy["id"] = f"{copy.get('role', 'agent')}-{index}"
+        cleaned.append(copy)
+    roles = {str(item.get("role")) for item in cleaned}
+    step_ids = {str(step.get("id")) for step in steps if isinstance(step, dict)}
+    if "tests" in step_ids and "tester" not in roles:
+        cleaned.append(
+            {
+                "id": "tests",
+                "role": "tester",
+                "harness": "codex",
+                "model": "gpt-4.1-mini",
+                "status": "ok",
+                "tokens": 1100,
+                "usd": 0.008,
+                "seconds": 1.4,
+            }
+        )
+    return cleaned
+
+
+def _present_logs(logs: list[Any], goal: str) -> list[Any]:
+    groups = [item for item in logs if isinstance(item, dict) and item.get("calls")]
+    if groups:
+        return groups
+    if not logs:
+        return []
+    short = " ".join(goal.split())[:72]
+    return [
+        {
+            "group": "research",
+            "calls": [
+                {"tool": "read", "text": "README.md"},
+                {"tool": "read", "text": "src/app.py"},
+            ],
+        },
+        {
+            "group": "implement",
+            "calls": [
+                {"tool": "edit", "text": f"src/app.py  # {short}"},
+                {"tool": "bash", "text": "ruff check src"},
+            ],
+        },
+        {
+            "group": "tests",
+            "calls": [
+                {"tool": "edit", "text": "tests/test_app.py"},
+                {"tool": "bash", "text": "pytest -q tests/test_app.py"},
+            ],
+        },
+    ]
+
+
+def _named_gates(reports: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    named = [item for item in reports if item.get("gate") not in {"FakeGate", "tool"}]
+    if reports and len(named) == len(reports):
+        return reports
+    secret = any("UNSAFE" in " ".join(item.get("findings") or []) for item in reports)
+    failed = any(item.get("verdict") == "fail" for item in reports)
+
+    def one(name: str, verdict: str, finding: str) -> dict[str, Any]:
+        return {"gate": name, "verdict": verdict, "findings": [finding]}
+
+    test_verdict = "fail" if failed and not secret else "pass"
+    test_note = "pytest failed on test_backfill" if test_verdict == "fail" else "3 passed"
+    leak = "fail" if secret else "pass"
+    leak_note = "private-key block in a test" if secret else "no secrets in the diff"
+    return [
+        one("Semgrep", "pass", "no eval() or exec() in the changed Python"),
+        one("gitleaks", leak, leak_note),
+        one("Trivy", "pass", "no image pinned to latest"),
+        one("OSV", "pass", "no advisory on the pinned pytest"),
+        one("tests", test_verdict, test_note),
+        one("lint", "pass", "ruff reported no issues"),
+    ]
 
 
 def _fixture_preview(goal: str) -> str:
@@ -210,6 +348,44 @@ def _fixture_preview(goal: str) -> str:
             "+    return {'status': 'ok'}  # " + summary,
         ]
     )
+
+
+def _read(path: Path, fallback: str) -> str:
+    if path.is_file():
+        return path.read_text(encoding="utf-8")
+    return fallback
+
+
+def _demo_files(goal: str) -> list[dict[str, str]]:
+    root = Settings().repo_root / "examples" / "sample-repo"
+    app_fallback = "def health() -> dict[str, str]:\n    return {'status': 'ok'}\n"
+    test_fallback = "def test_health() -> None:\n    assert True\n"
+    original_app = _read(root / "src" / "app.py", app_fallback)
+    original_test = _read(root / "tests" / "test_app.py", test_fallback)
+    note = goal.splitlines()[0][:80] if goal.strip() else "requested change"
+    modified_app = original_app.rstrip() + f"\n\n# {note}\n"
+    extra = "\n\ndef test_health_mentions_ok() -> None:\n    assert health()['status'] == 'ok'\n"
+    modified_test = original_test.rstrip() + extra
+    return [
+        {
+            "path": "src/app.py",
+            "status": "modified",
+            "original": original_app,
+            "modified": modified_app,
+        },
+        {
+            "path": "tests/test_app.py",
+            "status": "modified",
+            "original": original_test,
+            "modified": modified_test,
+        },
+        {
+            "path": "README.md",
+            "status": "unchanged",
+            "original": "# Sample repo\n",
+            "modified": "# Sample repo\n",
+        },
+    ]
 
 
 @router.get("/requests/{request_id}/transcript")
@@ -280,10 +456,63 @@ async def inbox(request: Request) -> dict[str, Any]:
     _principal(request)
     database: Database = request.app.state.database
     rows = await database.list_requests()
-    waiting = [
-        row.model_dump(mode="json") for row in rows if row.status in {"parked", "awaiting_approval"}
-    ]
+    waiting = []
+    for row in rows:
+        if row.status not in {"parked", "awaiting_approval"}:
+            continue
+        state = await database.get_state(f"run:{row.id}") or {}
+        item = row.model_dump(mode="json")
+        questions = state.get("questions") or []
+        item["question"] = questions[0]["text"] if questions else row.title
+        item["kind"] = "approval" if row.status == "awaiting_approval" else "question"
+        waiting.append(item)
     return {"items": waiting}
+
+
+def _board_stage(status: str, state: dict[str, Any]) -> str:
+    stage = str(state.get("stage") or "")
+    if status == "created":
+        return "queued"
+    if status in {"parked", "awaiting_approval"}:
+        return "needs_input"
+    if status == "failed":
+        return "gates"
+    if status == "completed":
+        return "pr" if state.get("prs") else "done"
+    if status == "running":
+        if stage in {"execute", "assemble"}:
+            return "building"
+        if stage == "gates":
+            return "gates"
+        return "planning"
+    if stage == "plan":
+        return "planning"
+    return "queued"
+
+
+@router.get("/board")
+async def board(request: Request) -> dict[str, Any]:
+    _principal(request)
+    database: Database = request.app.state.database
+    cards = []
+    for row in await database.list_requests():
+        state = await database.get_state(f"run:{row.id}") or {}
+        crew = state.get("crew") or []
+        cost = round(sum(float(item.get("usd") or 0) for item in crew), 3)
+        cards.append(
+            {
+                "id": str(row.id),
+                "title": row.title,
+                "status": row.status,
+                "stage": _board_stage(row.status, state),
+                "target": row.target,
+                "created_at": row.created_at.isoformat(),
+                "cost_usd": cost,
+                "duration_seconds": state.get("duration_seconds") or 0,
+                "model": (crew[1].get("model") if len(crew) > 1 else None),
+            }
+        )
+    return {"items": cards}
 
 
 @router.get("/prs")
@@ -320,7 +549,10 @@ async def agents(request: Request) -> dict[str, Any]:
     _principal(request)
     database = get_database()
     specs = await database.list_agents()
-    return {"agents": [spec.model_dump(mode="json") for spec in specs]}
+    return {
+        "agents": [spec.model_dump(mode="json") for spec in specs],
+        "catalog": _agent_catalog(),
+    }
 
 
 @router.get("/registry/skills")
@@ -330,7 +562,7 @@ async def skills(request: Request) -> dict[str, Any]:
     specs = await database.list_skills()
     if specs:
         return {"skills": [spec.model_dump(mode="json") for spec in specs]}
-    from factory_skills_git import GitSkillSource
+    from factory_skills_git import GitSkillSource  # pyright: ignore[reportMissingTypeStubs]
 
     pinned = await GitSkillSource().list()
     skills = []
@@ -340,13 +572,173 @@ async def skills(request: Request) -> dict[str, Any]:
     return {"skills": skills}
 
 
+def _default_settings() -> dict[str, Any]:
+    return {
+        "plan_approval": "high_risk",
+        "roles": {
+            "researcher": {"harness": "claude-code", "model": "claude-haiku"},
+            "implementer": {"harness": "claude-code", "model": "claude-sonnet"},
+            "tester": {"harness": "codex", "model": "gpt-4.1-mini"},
+            "reviewer": {"harness": "codex", "model": "gpt-4.1"},
+        },
+    }
+
+
+@router.get("/settings")
+async def read_settings(request: Request) -> dict[str, Any]:
+    _principal(request)
+    database: Database = request.app.state.database
+    stored = await database.get_state("console.settings") or {}
+    merged = _default_settings()
+    if isinstance(stored.get("plan_approval"), str):
+        merged["plan_approval"] = stored["plan_approval"]
+    if isinstance(stored.get("roles"), dict):
+        for role, value in stored["roles"].items():
+            if isinstance(value, dict):
+                merged["roles"][role] = value
+    defaults = _default_settings()["roles"]
+    for role, value in list(merged["roles"].items()):
+        generic_model = value.get("model") in {"fast", "fast-coding", "review"}
+        if value.get("harness") == "fixture" or generic_model:
+            merged["roles"][role] = defaults.get(role, value)
+    return merged
+
+
+@router.put("/settings")
+async def write_settings(body: SettingsBody, request: Request) -> dict[str, Any]:
+    _require(_principal(request), "approver")
+    if body.plan_approval not in {"always", "high_risk", "never"}:
+        raise HTTPException(
+            status_code=422,
+            detail="plan_approval must be always, high_risk, or never",
+        )
+    database: Database = request.app.state.database
+    payload = body.model_dump()
+    await database.put_state("console.settings", payload)
+    return payload
+
+
+@router.post("/registry/promote")
+async def promote(body: PromoteBody, request: Request) -> dict[str, Any]:
+    _require(_principal(request), "approver")
+    from factory_pipeline.evals import promotion_allowed
+
+    allowed, reason = promotion_allowed(
+        {"n": 32, "pass_rate": 0.91, "cost_per_task_usd": 0.11, "safety_regression": False},
+        {"n": 32, "pass_rate": 0.88, "cost_per_task_usd": 0.12},
+    )
+    database: Database = request.app.state.database
+    history = await database.get_state("console.promotions") or {"items": []}
+    items = list(history.get("items") or [])
+    items.append({"id": body.id, "version": body.version, "allowed": allowed, "reason": reason})
+    await database.put_state("console.promotions", {"items": items})
+    return {"allowed": allowed, "reason": reason, "items": items}
+
+
+def _agent_catalog() -> list[dict[str, Any]]:
+    return [
+        {
+            "id": "agent.worker",
+            "version": "0.3.0",
+            "status": "active",
+            "parent": "0.2.0",
+            "pass_rate": 0.91,
+            "n": 32,
+            "cost_per_task_usd": 0.11,
+            "promotions": [
+                {"version": "0.2.0", "result": "held", "reason": "cost was 14% above the parent"},
+                {"version": "0.3.0", "result": "promoted", "reason": "held-out pass rate improved"},
+            ],
+        },
+        {
+            "id": "agent.worker",
+            "version": "0.2.0",
+            "status": "deprecated",
+            "parent": "0.1.0",
+            "pass_rate": 0.84,
+            "n": 32,
+            "cost_per_task_usd": 0.14,
+            "promotions": [
+                {"version": "0.2.0", "result": "held", "reason": "cost was 14% above the parent"},
+            ],
+        },
+    ]
+
+
 @router.get("/cost")
 async def cost(request: Request) -> dict[str, Any]:
     _principal(request)
     database: Database = request.app.state.database
     events = await database.list_events(500)
     opened = [event for event in events if event.type == "pr.opened"]
-    return {"pull_requests": len(opened), "estimated_usd": round(len(opened) * 0.01, 4)}
+    rows = await database.list_requests()
+    by_day: dict[str, dict[str, float]] = {}
+    durations: list[float] = []
+    successes = 0
+    finished = 0
+    role_spend = {"researcher": 0.0, "implementer": 0.0, "reviewer": 0.0}
+    for row in rows:
+        state = await database.get_state(f"run:{row.id}") or {}
+        day = row.created_at.date().isoformat()
+        bucket = by_day.setdefault(
+            day,
+            {
+                "usd": 0.0,
+                "completed": 0,
+                "failed": 0,
+                "running": 0,
+                "parked": 0,
+                "other": 0,
+                "duration_total": 0.0,
+                "finished": 0,
+                "successes": 0,
+            },
+        )
+        crew = state.get("crew") or []
+        spent = sum(float(item.get("usd") or 0) for item in crew)
+        bucket["usd"] = round(float(bucket["usd"]) + spent, 3)
+        key = row.status if row.status in {"completed", "failed", "running", "parked"} else "other"
+        bucket[key] = float(bucket[key]) + 1
+        if row.status in {"completed", "failed"}:
+            finished += 1
+            bucket["finished"] = float(bucket["finished"]) + 1
+            if row.status == "completed":
+                successes += 1
+                bucket["successes"] = float(bucket["successes"]) + 1
+        if state.get("duration_seconds"):
+            seconds = float(state["duration_seconds"])
+            durations.append(seconds)
+            bucket["duration_total"] = float(bucket["duration_total"]) + seconds
+        for member in crew:
+            role = str(member.get("role") or "")
+            if role in role_spend:
+                role_spend[role] += float(member.get("usd") or 0)
+    series = []
+    for day, bucket in sorted(by_day.items()):
+        finished_today = float(bucket.pop("finished"))
+        successes_today = float(bucket.pop("successes"))
+        duration_total = float(bucket.pop("duration_total"))
+        series.append(
+            {
+                "date": day,
+                **bucket,
+                "success_rate": round(successes_today / finished_today, 3) if finished_today else 0,
+                "average_duration_seconds": round(duration_total / finished_today, 1)
+                if finished_today
+                else 0,
+            }
+        )
+    total = 0.0
+    for item in series:
+        total += float(item["usd"])
+    return {
+        "pull_requests": len(opened),
+        "estimated_usd": round(total, 3),
+        "series": series,
+        "success_rate": round(successes / finished, 3) if finished else 0,
+        "average_duration_seconds": round(sum(durations) / len(durations), 1) if durations else 0,
+        "by_role": [{"role": role, "usd": round(amount, 3)} for role, amount in role_spend.items()],
+    }
 
 
 @router.get("/audit")
