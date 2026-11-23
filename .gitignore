@@ -24,4 +24,7 @@ htmlcov/
 .temporal/
 node_modules/
 frontend/console/dist/
+frontend/console/test-results/
+frontend/console/playwright-report/
+frontend/console/blob-report/
 .DS_Store

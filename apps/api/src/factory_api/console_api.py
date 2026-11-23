@@ -1,6 +1,7 @@
 """Console and operator routes. They call the same pipeline the worker runs."""
 
 import os
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -36,6 +37,54 @@ class FollowBody(BaseModel):
 class NewAppBody(BaseModel):
     name: str
     description: str
+
+
+class ConnectBody(BaseModel):
+    full_name: str
+
+
+CONNECTED_KEY = "console.connected_repo"
+
+
+def repo_catalog(root: Path) -> list[dict[str, Any]]:
+    sample = (root / "examples" / "sample-repo").resolve()
+    repos: list[dict[str, Any]] = []
+    if sample.is_dir():
+        repos.append(
+            {
+                "owner": "local",
+                "name": "sample",
+                "full_name": "local/sample",
+                "description": "Bundled sample service. Safe to use with no keys.",
+                "path": str(sample),
+                "kind": "local",
+            }
+        )
+    repos.append(
+        {
+            "owner": "factory",
+            "name": "demo",
+            "full_name": "factory/demo",
+            "description": "In-memory fixture repository.",
+            "path": None,
+            "kind": "fixture",
+        }
+    )
+    return repos
+
+
+async def default_target(database: Database) -> str | None:
+    connected = await database.get_state(CONNECTED_KEY) or {}
+    chosen = connected.get("path") or connected.get("full_name")
+    if isinstance(chosen, str) and chosen:
+        return chosen
+    if os.environ.get("FACTORY_AUTH_MODE", "dev") != "dev":
+        return None
+    catalog = repo_catalog(Settings().repo_root)
+    sample = next((item for item in catalog if item["kind"] == "local"), None)
+    if sample is None:
+        return None
+    return str(sample["path"])
 
 
 def _principal(request: Request) -> Principal:
@@ -80,15 +129,87 @@ async def me(request: Request) -> dict[str, Any]:
     return {"id": principal.id, "roles": principal.roles}
 
 
+def _mode() -> str:
+    if os.environ.get("FACTORY_GITHUB_APP_ID") and os.environ.get("FACTORY_GITHUB_APP_PRIVATE_KEY"):
+        return "github-app"
+    return "fixture"
+
+
 @router.get("/repos")
 async def repos(request: Request) -> dict[str, Any]:
     _principal(request)
+    database: Database = request.app.state.database
+    catalog = repo_catalog(Settings().repo_root)
+    connected = await database.get_state(CONNECTED_KEY)
+    return {"repos": catalog, "connected": connected, "mode": _mode()}
+
+
+@router.post("/repos/connect")
+async def connect_repo(body: ConnectBody, request: Request) -> dict[str, Any]:
+    _principal(request)
+    catalog = repo_catalog(Settings().repo_root)
+    match = next((item for item in catalog if item["full_name"] == body.full_name), None)
+    if match is None:
+        raise HTTPException(status_code=404, detail="unknown repository")
+    database: Database = request.app.state.database
+    await database.put_state(CONNECTED_KEY, match)
+    return match
+
+
+@router.get("/requests/{request_id}/view")
+async def run_view(request_id: UUID, request: Request) -> dict[str, Any]:
+    _principal(request)
+    database: Database = request.app.state.database
+    found = await database.get_request(request_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="request not found")
+    state = await database.get_state(f"run:{request_id}") or {}
+    messages = await database.list_messages(request_id)
+    events = await database.read(request_id)
+    raw_diff = str(state.get("diff") or "").strip()
+    if raw_diff in {"", "HEAD"}:
+        steps = list((state.get("plan") or {}).get("steps") or [])
+        goal = str(steps[0].get("goal") if steps else found.body)
+        diff = _fixture_preview(goal)
+        diff_kind = "fixture"
+    else:
+        diff = raw_diff
+        diff_kind = "git"
     return {
-        "repos": [
-            {"owner": "factory", "name": "demo", "full_name": "factory/demo"},
-        ],
-        "mode": "fixture" if not os.environ.get("FACTORY_GITHUB_APP_ID") else "github-app",
+        "request": found.model_dump(mode="json"),
+        "messages": [item.model_dump(mode="json") for item in messages],
+        "events": [item.model_dump(mode="json") for item in events],
+        "diff": diff,
+        "diff_kind": diff_kind,
+        "gates": state.get("gates") or [],
+        "agent": state.get("agent"),
+        "prs": state.get("prs") or [],
+        "risk": state.get("risk", "low"),
+        "risk_score": state.get("risk_score", 0),
+        "assumptions": state.get("assumptions") or [],
+        "questions": state.get("questions") or [],
+        "stage": state.get("stage"),
     }
+
+
+def _fixture_preview(goal: str) -> str:
+    parts = [part.strip() for part in goal.splitlines() if part.strip()]
+    unique: list[str] = []
+    for part in parts:
+        if part not in unique:
+            unique.append(part)
+    summary = (unique[0] if unique else "Apply the requested change.")[:120]
+    return "\n".join(
+        [
+            "diff --git a/src/app.py b/src/app.py",
+            "--- a/src/app.py",
+            "+++ b/src/app.py",
+            "@@ -1,2 +1,6 @@",
+            " def health() -> dict[str, str]:",
+            "-    return {'status': 'ok'}",
+            "+    return {'status': 'ok'}  # " + summary,
+        ]
+    )
 
 
 @router.get("/requests/{request_id}/transcript")
@@ -207,7 +328,16 @@ async def skills(request: Request) -> dict[str, Any]:
     _principal(request)
     database = get_database()
     specs = await database.list_skills()
-    return {"skills": [spec.model_dump(mode="json") for spec in specs]}
+    if specs:
+        return {"skills": [spec.model_dump(mode="json") for spec in specs]}
+    from factory_skills_git import GitSkillSource
+
+    pinned = await GitSkillSource().list()
+    skills = []
+    for item in pinned:
+        name, _, version = item.ref.partition("@")
+        skills.append({"id": name, "version": version[:12], "license": item.license})
+    return {"skills": skills}
 
 
 @router.get("/cost")
@@ -224,7 +354,11 @@ async def audit(request: Request) -> dict[str, Any]:
     _principal(request)
     database: Database = request.app.state.database
     events = await database.list_events(200)
-    return {"events": [event.model_dump(mode="json") for event in events]}
+    killed = await database.get_state(KILL_KEY) or {}
+    return {
+        "events": [event.model_dump(mode="json") for event in events],
+        "kill_switch": bool(killed.get("on")),
+    }
 
 
 @router.post("/admin/kill")

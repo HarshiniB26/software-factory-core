@@ -35,6 +35,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from sse_starlette.sse import EventSourceResponse
 from starlette.middleware.sessions import SessionMiddleware
 
+from factory_api.console_api import default_target
 from factory_api.console_api import router as console_router
 from factory_api.oauth import router as oauth_router
 
@@ -103,6 +104,10 @@ async def create_request(body: RequestCreate, request: Request) -> FactoryReques
         Policy().validate(config, load_modules())
     except (PolicyError, LoaderError, ValidationError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not body.target:
+        chosen = await default_target(database)
+        if chosen:
+            body = body.model_copy(update={"target": chosen})
     created = await database.create_request(body)
     from factory_pipeline.service import blank_state
 

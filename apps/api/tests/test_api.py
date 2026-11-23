@@ -29,6 +29,27 @@ async def database(tmp_path: Path) -> AsyncIterator[Database]:
         await store.dispose()
 
 
+async def test_dev_connects_the_sample_repo(database: Database) -> None:
+    app = create_app(database, FakeOrchestrator())
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        listed = await client.get("/repos")
+        assert listed.status_code == 200
+        names = [item["full_name"] for item in listed.json()["repos"]]
+        assert "local/sample" in names
+        connected = await client.post("/repos/connect", json={"full_name": "local/sample"})
+        assert connected.status_code == 200
+        assert connected.json()["path"].endswith("examples/sample-repo")
+        missing = await client.post("/repos/connect", json={"full_name": "nope/missing"})
+        assert missing.status_code == 404
+        created = await client.post(
+            "/requests",
+            json={"title": "Add health", "body": "Add a health check"},
+        )
+        assert created.status_code == 201
+        assert str(created.json()["target"]).endswith("examples/sample-repo")
+
+
 async def test_health_and_list(database: Database) -> None:
     app = create_app(database, FakeOrchestrator())
     transport = ASGITransport(app=app)
