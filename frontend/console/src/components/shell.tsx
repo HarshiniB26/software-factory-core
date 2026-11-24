@@ -18,7 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 type Session = {
@@ -26,6 +26,7 @@ type Session = {
   repos: Repo[];
   connected: Repo | null;
   mode: string;
+  oauth: boolean;
   runs: RequestRow[];
   refresh: () => Promise<void>;
   connect: (fullName: string) => Promise<void>;
@@ -46,6 +47,7 @@ export function Shell() {
   const [repos, setRepos] = useState<Repo[]>([]);
   const [connected, setConnected] = useState<Repo | null>(null);
   const [mode, setMode] = useState("fixture");
+  const [oauth, setOauth] = useState(false);
   const [runs, setRuns] = useState<RequestRow[]>([]);
   const [menu, setMenu] = useState(false);
   const [palette, setPalette] = useState(false);
@@ -55,8 +57,9 @@ export function Shell() {
     const [me, repoList, requestList] = await Promise.all([api.me(), api.repos(), api.requests()]);
     setPrincipal(me);
     setRepos(repoList.repos);
-    setConnected(repoList.connected);
+    setConnected(repoList.connected?.full_name ? repoList.connected : null);
     setMode(repoList.mode);
+    setOauth(Boolean(repoList.oauth));
     setRuns([...requestList].sort((left, right) => right.created_at.localeCompare(left.created_at)));
   }, []);
 
@@ -88,8 +91,8 @@ export function Shell() {
   }, []);
 
   const session = useMemo<Session>(
-    () => ({ principal, repos, connected, mode, runs, refresh, connect }),
-    [principal, repos, connected, mode, runs, refresh, connect],
+    () => ({ principal, repos, connected, mode, oauth, runs, refresh, connect }),
+    [principal, repos, connected, mode, oauth, runs, refresh, connect],
   );
 
   return (
@@ -149,7 +152,7 @@ export function Shell() {
           />
         ) : null}
         {connectOpen ? (
-          <ConnectDialog repos={repos} mode={mode} onClose={() => setConnectOpen(false)} onConnect={connect} />
+          <ConnectDialog repos={repos} mode={mode} oauth={oauth} onClose={() => setConnectOpen(false)} onConnect={connect} />
         ) : null}
       </div>
     </SessionContext.Provider>
@@ -312,11 +315,13 @@ function Palette({ onClose, onPick }: { onClose: () => void; onPick: (path: stri
 function ConnectDialog({
   repos,
   mode,
+  oauth,
   onClose,
   onConnect,
 }: {
   repos: Repo[];
   mode: string;
+  oauth: boolean;
   onClose: () => void;
   onConnect: (fullName: string) => Promise<void>;
 }) {
@@ -347,14 +352,18 @@ function ConnectDialog({
             </button>
           ))}
         </div>
-        {mode !== "github-app" ? (
-          <a className="mt-4 inline-flex text-sm text-zinc-500 underline" href="/api/auth/github/login">
-            Sign in with GitHub
+        {oauth ? (
+          <a className="mt-4 inline-flex text-sm font-medium underline" href="/api/auth/github/login">
+            Connect GitHub
           </a>
         ) : (
-          <a className="mt-4 inline-flex text-sm font-medium underline" href="/api/auth/github/login">
-            Sign in with GitHub
-          </a>
+          <p className="mt-4 text-sm text-zinc-500">
+            GitHub sign-in needs the OAuth app. See{" "}
+            <Link to="/settings#github" className="font-medium text-[var(--accent)] underline" onClick={onClose}>
+              Settings → GitHub
+            </Link>
+            .
+          </p>
         )}
       </div>
     </div>

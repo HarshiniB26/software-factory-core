@@ -2,7 +2,7 @@ import { useSession } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 
 export function ReposPage() {
-  const { repos, connected, mode, connect } = useSession();
+  const { repos, connected, mode, connect, oauth } = useSession();
   return (
     <div className="mx-auto max-w-3xl px-6 py-8">
       <h1 className="text-xl font-semibold tracking-tight">Repositories</h1>
@@ -28,9 +28,15 @@ export function ReposPage() {
           </article>
         ))}
       </div>
-      <a className="mt-6 inline-flex text-sm font-medium underline" href="/api/auth/github/login">
-        Sign in with GitHub
-      </a>
+      {oauth ? (
+        <a className="mt-6 inline-flex text-sm font-medium underline" href="/api/auth/github/login">
+          Connect GitHub
+        </a>
+      ) : (
+        <p className="mt-6 text-sm text-zinc-500">
+          GitHub sign-in needs the OAuth app. See Settings → GitHub. The local sample stays available.
+        </p>
+      )}
     </div>
   );
 }

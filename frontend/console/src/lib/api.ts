@@ -45,7 +45,7 @@ export const api = {
     return session;
   },
   repos: () =>
-    unwrap<{ repos: Repo[]; connected: Repo | null; mode: string }>(
+    unwrap<{ repos: Repo[]; connected: Repo | null; mode: string; oauth: boolean }>(
       raw.GET("/repos", { headers: authHeaders() }),
     ),
   connect: (fullName: string) =>

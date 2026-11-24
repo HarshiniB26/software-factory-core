@@ -114,6 +114,21 @@ export function SettingsPage() {
         )}
       </section>
 
+      <section id="github" className="mt-8 scroll-mt-8">
+        <h2 className="text-sm font-medium">GitHub</h2>
+        <p className="mt-1 text-sm text-zinc-500">
+          Sign-in uses <span className="font-mono text-xs">FACTORY_GITHUB_CLIENT_ID</span> and{" "}
+          <span className="font-mono text-xs">FACTORY_GITHUB_CLIENT_SECRET</span>. Without them, Connect GitHub stays in the composer and explains that the local sample is still available.
+        </p>
+        {session.oauth ? (
+          <a className="mt-3 inline-flex text-sm font-medium underline" href="/api/auth/github/login">
+            Connect GitHub
+          </a>
+        ) : (
+          <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">The OAuth app is not configured in this workspace.</p>
+        )}
+      </section>
+
       <section className="mt-8">
         <h2 className="text-sm font-medium">Session</h2>
         <p className="mt-1 text-sm text-zinc-500">

@@ -4,6 +4,10 @@
 
 The worker polls Temporal. The API accepts chat requests and signals the workflow when a person answers or approves. Watch `GET /audit` or the console Audit page. Every module call is an append-only event with `module@version`.
 
+## GitHub in the composer
+
+The new-issue box sends the connected repository as the request target. `GET /repos` includes `oauth`, which is true only when `FACTORY_GITHUB_CLIENT_ID` and `FACTORY_GITHUB_CLIENT_SECRET` are both set. The Connect GitHub control then goes to `/auth/github/login`. Without those values the console does not open that route. The popover tells the operator to use Settings → GitHub, and the local sample can still be selected. The API does not expose branches, so the composer has no branch control.
+
 ## Kill switch
 
 `POST /admin/kill` with an admin token sets `policy.kill_switch`. The next pipeline tick stops the run and marks it `killed`. `POST /admin/resume` clears the switch. Dev mode treats the unsigned local user as admin. Production (`FACTORY_AUTH_MODE=github`) requires a signed admin token.

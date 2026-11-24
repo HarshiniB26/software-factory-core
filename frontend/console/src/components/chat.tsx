@@ -8,11 +8,15 @@ import {
   useLocalRuntime,
   type ChatModelAdapter,
 } from "@assistant-ui/react";
+import { RepoPicker } from "@/components/repo-picker";
 import { RunPanel } from "@/components/run-panel";
+import { useSession } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { issueTarget } from "@/lib/repo-picker";
 import { motion } from "framer-motion";
-import { ArrowUp } from "lucide-react";
+import { ArrowUp, Github } from "lucide-react";
+import { useState } from "react";
 
 const SUGGESTIONS = [
   "Show coupon expiry in the cart",
@@ -40,6 +44,9 @@ const adapter: ChatModelAdapter = {
     const text = part && "text" in part ? part.text.trim() : "";
     const body = text || "Add a health check";
     const target = await bridge.target();
+    if (!target) {
+      return { content: [{ type: "text" as const, text: "Choose a repository to send this issue." }] };
+    }
     const created = await api.createRequest(body.slice(0, 80), body, target);
     const done = new Set(["completed", "failed", "killed", "parked", "awaiting_approval"]);
     for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -70,23 +77,76 @@ export function ChatThread() {
             />
           </div>
         </ThreadPrimitive.Viewport>
-        <div className="px-4 pb-4">
-          <ComposerPrimitive.Root className="surface mx-auto flex w-full max-w-3xl items-end gap-2 rounded-2xl p-2">
-            <ComposerPrimitive.Input
-              data-composer
-              placeholder="Describe the issue"
-              className="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none"
-            />
+        <ComposerBar />
+      </ThreadPrimitive.Root>
+    </AssistantRuntimeProvider>
+  );
+}
+
+function ComposerBar() {
+  const session = useSession();
+  const [open, setOpen] = useState(false);
+  const [hint, setHint] = useState(false);
+  const selected = session.connected?.full_name ? session.connected : null;
+  const ready = Boolean(issueTarget(selected));
+
+  return (
+    <div className="px-4 pb-4">
+      {session.oauth ? null : (
+        <div className="mx-auto mb-2 flex w-full max-w-3xl items-center justify-between gap-3 rounded-xl border border-[var(--line)] bg-[color-mix(in_srgb,var(--accent-2)_12%,transparent)] px-3 py-2">
+          <p className="text-sm">GitHub isn't connected. The local sample still runs.</p>
+          <button
+            type="button"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-white"
+            onClick={() => setOpen(true)}
+          >
+            <Github className="h-3.5 w-3.5" aria-hidden="true" />
+            Connect GitHub
+          </button>
+        </div>
+      )}
+      <ComposerPrimitive.Root className="surface mx-auto flex w-full max-w-3xl flex-col rounded-2xl p-2">
+        <ComposerPrimitive.Input
+          data-composer
+          placeholder="Describe the issue"
+          submitOnEnter={ready}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey && !ready) setHint(true);
+          }}
+          className="max-h-40 min-h-11 w-full resize-none bg-transparent px-2 py-2 text-sm outline-none"
+        />
+        <div className="flex items-center justify-between gap-2 px-1 pt-1">
+          <RepoPicker
+            repos={session.repos}
+            connected={selected}
+            oauth={session.oauth}
+            open={open}
+            onOpenChange={setOpen}
+            onSelect={(fullName) => {
+              setHint(false);
+              void session.connect(fullName);
+            }}
+          />
+          {ready ? (
             <ComposerPrimitive.Send asChild>
               <Button size="icon" aria-label="Send">
                 <ArrowUp className="h-4 w-4" />
               </Button>
             </ComposerPrimitive.Send>
-          </ComposerPrimitive.Root>
-          <p className="mx-auto mt-2 max-w-3xl text-center text-xs text-zinc-400">Enter to send · ⌘K for commands</p>
+          ) : (
+            <Button size="icon" aria-label="Send" type="button" onClick={() => setHint(true)}>
+              <ArrowUp className="h-4 w-4" />
+            </Button>
+          )}
         </div>
-      </ThreadPrimitive.Root>
-    </AssistantRuntimeProvider>
+        {hint && !ready ? (
+          <p role="status" className="px-2 pt-1 text-xs text-[var(--accent-2)]">
+            Choose a repository to send this issue.
+          </p>
+        ) : null}
+      </ComposerPrimitive.Root>
+      <p className="mx-auto mt-2 max-w-3xl text-center text-xs text-zinc-400">Enter to send · ⌘K for commands</p>
+    </div>
   );
 }
 

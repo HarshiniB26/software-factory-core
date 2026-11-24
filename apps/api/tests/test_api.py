@@ -37,6 +37,7 @@ async def test_dev_connects_the_sample_repo(database: Database) -> None:
         assert listed.status_code == 200
         names = [item["full_name"] for item in listed.json()["repos"]]
         assert "local/sample" in names
+        assert listed.json()["oauth"] is False
         connected = await client.post("/repos/connect", json={"full_name": "local/sample"})
         assert connected.status_code == 200
         assert connected.json()["path"].endswith("examples/sample-repo")

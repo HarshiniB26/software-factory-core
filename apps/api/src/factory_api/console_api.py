@@ -151,13 +151,24 @@ def _mode() -> str:
     return "fixture"
 
 
+def _github_oauth() -> bool:
+    client_id = os.environ.get("FACTORY_GITHUB_CLIENT_ID")
+    client_secret = os.environ.get("FACTORY_GITHUB_CLIENT_SECRET")
+    return bool(client_id and client_secret)
+
+
 @router.get("/repos")
 async def repos(request: Request) -> dict[str, Any]:
     _principal(request)
     database: Database = request.app.state.database
     catalog = repo_catalog(Settings().repo_root)
     connected = await database.get_state(CONNECTED_KEY)
-    return {"repos": catalog, "connected": connected, "mode": _mode()}
+    return {
+        "repos": catalog,
+        "connected": connected,
+        "mode": _mode(),
+        "oauth": _github_oauth(),
+    }
 
 
 @router.post("/repos/connect")
