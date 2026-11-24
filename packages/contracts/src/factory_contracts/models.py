@@ -133,6 +133,8 @@ class TaskStep(BaseModel):
     touch: list[str] = Field(default_factory=list)
     checks: list[str] = Field(default_factory=list)
     risk: Risk = "low"
+    role: str = ""
+    capabilities: list[str] = Field(default_factory=list)
 
 
 class TaskDAG(BaseModel):
@@ -190,6 +192,7 @@ class AgentSpec(BaseModel):
     id: str
     version: str
     status: AgentStatus = "draft"
+    prompt: str = ""
     lineage: AgentLineage = Field(default_factory=AgentLineage)
     capabilities: list[str] = Field(default_factory=list)
     skills: list[str] = Field(default_factory=list)

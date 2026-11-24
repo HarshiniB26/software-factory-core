@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
+import { api, captureSessionToken, sessionFromRedirect } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatWhen } from "@/lib/format";
 import { useTheme } from "@/lib/theme";
@@ -101,8 +101,20 @@ export function Shell() {
   }, [refresh]);
 
   useEffect(() => {
-    refresh().catch((err: unknown) => toast.error(err instanceof Error ? err.message : "Could not load the workspace"));
-  }, []);
+    const returned = sessionFromRedirect(window.location.search).token !== null;
+    captureSessionToken();
+    const load = async () => {
+      if (returned) {
+        try {
+          applyList(await api.refreshGithub());
+        } catch {
+          // The signed-in user may not have a GitHub account yet.
+        }
+      }
+      await refresh();
+    };
+    load().catch((err: unknown) => toast.error(err instanceof Error ? err.message : "Could not load the workspace"));
+  }, [applyList, refresh]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {

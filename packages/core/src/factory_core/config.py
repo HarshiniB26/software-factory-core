@@ -37,6 +37,7 @@ def default_config() -> dict[str, Any]:
             "parallel_steps": 3,
             "clarifier_v2": False,
             "plan_approval": "high_risk",
+            "clarification": "major",
         },
         "budgets": {"per_run_usd": 8.0},
         "module_config": {},

@@ -71,6 +71,18 @@ export function SettingsPage() {
             }}
           >
             <label className="block text-sm">
+              When to ask
+              <select
+                value={workspace.clarification ?? "major"}
+                onChange={(event) => setWorkspace({ ...workspace, clarification: event.target.value })}
+                className="mt-1 h-9 w-full rounded-md border border-zinc-200 bg-transparent px-2 dark:border-zinc-800"
+              >
+                <option value="major">Ask only when the change is major</option>
+                <option value="always">Always ask</option>
+                <option value="assume">Assume and continue</option>
+              </select>
+            </label>
+            <label className="block text-sm">
               Plan approval
               <select
                 value={workspace.plan_approval}

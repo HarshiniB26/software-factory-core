@@ -4,8 +4,11 @@ import asyncio
 from typing import Any
 from uuid import UUID
 
+import json
+
 from factory_contracts import (
     ChatMessage,
+    ContractError,
     EventDraft,
     GateContext,
     ObservabilityItem,
@@ -14,6 +17,7 @@ from factory_contracts import (
     RepoContext,
     SandboxSpec,
     Spec,
+    TaskDAG,
     TaskSpec,
 )
 from factory_core import Policy, Settings, get_database, load_modules, resolve_config
@@ -128,11 +132,11 @@ async def tick(request_id: UUID, hint: dict[str, Any] | None = None) -> dict[str
     while state["stage"] not in {"parked", "awaiting_approval", "done"}:
         stage = str(state["stage"])
         if stage == "clarify":
-            await _clarify(database, ports, request_id, request, state)
+            await _clarify(database, ports, request_id, request, state, config.flags)
         elif stage == "plan":
             await _plan(database, ports, request_id, request, state, config.flags)
         elif stage == "assemble":
-            await _assemble(database, request_id, state)
+            await _assemble(database, ports, request_id, state)
         elif stage == "execute":
             await _execute(database, ports, request_id, request, state, config.flags)
         elif stage == "gates":
@@ -238,10 +242,38 @@ def request_status_ok(state: dict[str, Any]) -> bool:
 
 
 async def _clarify(
-    database: Any, ports: dict[str, Any], request_id: UUID, request: Any, state: dict[str, Any]
+    database: Any,
+    ports: dict[str, Any],
+    request_id: UUID,
+    request: Any,
+    state: dict[str, Any],
+    flags: dict[str, Any],
 ) -> None:
     repo = request.target or "demo/repo"
     clarification = await ports["clarifier"].assess(request, RepoContext(repo=repo))
+    mode = str(flags.get("clarification", "major"))
+    if mode == "assume":
+        clarification = clarification.model_copy(
+            update={
+                "status": "assumptions",
+                "assumptions": list(clarification.assumptions)
+                + [question.text for question in clarification.questions],
+                "questions": [],
+            }
+        )
+    elif mode == "always" and clarification.status == "clear" and clarification.assumptions:
+        clarification = clarification.model_copy(
+            update={
+                "status": "questions",
+                "questions": [
+                    {
+                        "text": clarification.assumptions[0],
+                        "options": ["proceed", "stop"],
+                        "default": None,
+                    }
+                ],
+            }
+        )
     questions = [question.model_dump() for question in clarification.questions[:3]]
     still_open = (
         clarification.status == "questions"
@@ -302,7 +334,9 @@ async def _plan(
         checks=list(state.get("checks") or []),
         assumptions=list(state.get("assumptions") or []),
     )
-    dag = await ports["planner"].plan(spec)
+    dag = await _plan_with_model(ports, spec)
+    if dag is None:
+        dag = await ports["planner"].plan(spec)
     steps = [step.model_dump() for step in dag.steps]
     score, level = score_risk(steps)
     state["plan"] = {"steps": steps, "risk": level}
@@ -326,17 +360,70 @@ async def _plan(
     state["stage"] = "assemble"
 
 
-async def _assemble(database: Any, request_id: UUID, state: dict[str, Any]) -> None:
-    from factory_pipeline.assemble import assemble_agent
+async def _plan_with_model(ports: dict[str, Any], spec: Spec) -> TaskDAG | None:
+    model = ports["model"]
+    choice = await model.route("planner", spec.summary[:200])
+    completion = await model.complete(
+        choice.model,
+        [
+            ChatMessage(
+                role="user",
+                content=(
+                    "Return a TaskDAG JSON object with steps. Each step has id, goal, "
+                    "depends_on, touch, checks, risk, role, and capabilities. "
+                    "capabilities is free text. Do not invent missing requirements.\n"
+                    f"{spec.summary}"
+                ),
+            )
+        ],
+    )
+    return _parse_dag(completion.text)
+
+
+def _parse_dag(text: str) -> TaskDAG | None:
+    start = text.find("{")
+    end = text.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        payload = json.loads(text[start : end + 1])
+        return TaskDAG.model_validate(payload)
+    except (json.JSONDecodeError, ValueError):
+        return None
+
+
+async def _role_settings(database: Any) -> dict[str, Any]:
+    stored = await database.get_state("console.settings") or {}
+    roles = stored.get("roles")
+    return roles if isinstance(roles, dict) else {}
+
+
+async def _assemble(
+    database: Any, ports: dict[str, Any], request_id: UUID, state: dict[str, Any]
+) -> None:
+    from factory_pipeline.registry import select_agent
 
     steps = list((state.get("plan") or {}).get("steps") or [])
-    agent = await assemble_agent(database, steps)
-    state["agent"] = {"id": agent.id, "version": agent.version, "status": agent.status}
-    await _event(
-        request_id,
-        "agent.selected",
-        {"agent": f"{agent.id}@{agent.version}", "status": agent.status},
-    )
+    roles = await _role_settings(database)
+    chosen = []
+    for step in steps:
+        agent, decision, reason = await select_agent(database, ports, step, roles)
+        step["agent"] = {"id": agent.id, "version": agent.version, "status": agent.status}
+        chosen.append(agent)
+        await _event(
+            request_id,
+            "agent.decision",
+            {
+                "step": step.get("id"),
+                "decision": decision,
+                "reason": reason,
+                "agent": f"{agent.id}@{agent.version}",
+                "status": agent.status,
+            },
+        )
+    agent = chosen[-1] if chosen else None
+    if agent is not None:
+        state["agent"] = {"id": agent.id, "version": agent.version, "status": agent.status}
     state["stage"] = "execute"
 
 
@@ -351,7 +438,7 @@ async def _execute(
     steps = list((state.get("plan") or {}).get("steps") or [])
     cap = int(flags.get("parallel_steps", 3) or 3)
     waves = schedule(steps, cap=cap)
-    harness = ports["harnesses"][0]
+    roles = await _role_settings(database)
     sandbox = ports["sandbox"]
     diffs: list[str] = []
     previews: list[dict[str, str]] = []
@@ -377,10 +464,21 @@ async def _execute(
             if added.exit_code != 0:
                 work = "/work/repo"
             crew = _crew_member(str(step["id"]))
+            role = str(step.get("role") or crew["role"])
+            harness = _harness_for(ports["harnesses"], role, roles)
+            bound = (step.get("agent") or {}).get("id")
+            crew["role"] = role
+            crew["harness"] = harness.capabilities().name
+            model_name = str((roles.get(role) or {}).get("model") or crew["model"])
+            crew["model"] = model_name
             state.setdefault("logs", []).append(
                 {"group": str(step["id"]), "calls": _tool_calls(step)}
             )
-            await _event(request_id, "step.started", {"step": step["id"], "role": crew["role"]})
+            await _event(
+                request_id,
+                "step.started",
+                {"step": step["id"], "role": role, "harness": crew["harness"], "agent": bound},
+            )
             task_id = await harness.start_task(
                 TaskSpec(instruction=str(step.get("goal", "")), repo=handle.id)
             )
@@ -532,15 +630,38 @@ async def _publish(
     )
     failed = bool(state.get("gate_failed"))
     await database.update_status(request_id, "failed" if failed else "completed")
+    from factory_pipeline.registry import record_outcome
+
+    await record_outcome(database, state)
     state["stage"] = "done"
 
 
+def _harness_for(harnesses: list[Any], role: str, roles: dict[str, Any]) -> Any:
+    wanted = str((roles.get(role) or {}).get("harness") or "")
+    names = []
+    for harness in harnesses:
+        name = str(harness.capabilities().name)
+        names.append(name)
+        if wanted and (wanted == name or wanted in name or name in wanted):
+            return harness
+    if names and set(names) <= {"fake", "fixture"}:
+        return harnesses[0]
+    if not wanted and harnesses:
+        return harnesses[0]
+    raise ContractError(f"harness {wanted or role} is not installed")
+
+
 async def _review(ports: dict[str, Any], state: dict[str, Any]) -> tuple[str, str]:
-    harnesses = ports["harnesses"]
-    coder = getattr(harnesses[0].capabilities(), "name", "fake") if harnesses else "fake"
-    reviewer = "codex" if "claude" in coder else "claude"
-    if len(harnesses) > 1:
-        reviewer = getattr(harnesses[1].capabilities(), "name", reviewer)
+    database = get_database()
+    roles = await _role_settings(database)
+    reviewer_row = roles.get("reviewer") if isinstance(roles.get("reviewer"), dict) else {}
+    reviewer = str(reviewer_row.get("harness") or "reviewer")
+    coder_names = {
+        str((roles.get(role) or {}).get("harness") or "")
+        for role in ("implementer", "researcher", "tester")
+    }
+    if reviewer in coder_names and reviewer:
+        reviewer = f"{reviewer}-review"
     model = ports["model"]
     choice = await model.route("reviewer", state.get("diff", "")[:200])
     completion = await model.complete(

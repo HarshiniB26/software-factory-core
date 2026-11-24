@@ -23,6 +23,7 @@ flags:
   parallel_steps: 3
   clarifier_v2: false
   plan_approval: high_risk
+  clarification: major
 budgets:
   per_run_usd: 8
 module_config:

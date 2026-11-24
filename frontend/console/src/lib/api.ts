@@ -16,6 +16,22 @@ import {
 
 const raw = createClient<paths>({ baseUrl: "/api" });
 
+export function sessionFromRedirect(search: string): { token: string | null; search: string } {
+  const params = new URLSearchParams(search);
+  const token = params.get("token");
+  if (!token) return { token: null, search };
+  params.delete("token");
+  const next = params.toString();
+  return { token, search: next ? `?${next}` : "" };
+}
+
+export function captureSessionToken(): void {
+  const found = sessionFromRedirect(window.location.search);
+  if (!found.token) return;
+  localStorage.setItem("factory_token", found.token);
+  window.history.replaceState(null, "", `${window.location.pathname}${found.search}${window.location.hash}`);
+}
+
 function authHeaders(): Headers {
   const headers = new Headers();
   const token = localStorage.getItem("factory_token");

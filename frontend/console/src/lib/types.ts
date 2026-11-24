@@ -116,6 +116,7 @@ export type RoleSetting = { harness: string; model: string };
 
 export type WorkspaceSettings = {
   plan_approval: string;
+  clarification: string;
   roles: Record<string, RoleSetting>;
 };
 

@@ -104,6 +104,9 @@ async def create_request(body: RequestCreate, request: Request) -> FactoryReques
     approval = stored.get("plan_approval")
     if isinstance(approval, str) and "plan_approval" not in flags:
         flags["plan_approval"] = approval
+    clarification = stored.get("clarification")
+    if isinstance(clarification, str) and "clarification" not in flags:
+        flags["clarification"] = clarification
     if flags:
         overrides["flags"] = flags
         body = body.model_copy(update={"overrides": overrides})

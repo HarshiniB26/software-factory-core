@@ -22,7 +22,11 @@ The new-issue box sends the connected repository as the request target. `GET /re
 
 ## Clarification
 
-The clarifier asks at most 3 questions. The workflow waits up to 3 days and at most 2 rounds, then records the chosen option or the default as an assumption on the pull request. The factory never merges.
+`flags.clarification` is `major` (default), `always`, or `assume`. Settings has the same control. `major` asks in the Inbox only when scope, data, API, security, or cost is ambiguous. `always` parks instead of guessing. `assume` records the open points and continues. The clarifier asks at most 3 questions, for at most 2 rounds. The factory never merges.
+
+## Planner, registry, and harnesses
+
+The planner asks the model module for a TaskDAG. Each step carries a role and free-text capabilities. The registry embeds that need and compares it with each agent's prompt, skills, tools, harness, model tier, and evals. The model then chooses REUSE, UPGRADE, or CREATE. The reason is stored on `agent.decision`. New agents stay draft until held-out evals pass. A step runs on the harness named for its role in Settings. A named harness that is not installed fails the step. The reviewer role has its own harness and model. Demo runs load only when `FACTORY_DEMO_SEED=1`.
 
 ## Backups
 

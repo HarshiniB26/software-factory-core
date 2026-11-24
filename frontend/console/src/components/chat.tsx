@@ -19,9 +19,9 @@ import { ArrowUp, Github } from "lucide-react";
 import { useState } from "react";
 
 const SUGGESTIONS = [
-  "Show coupon expiry in the cart",
-  "Add Apple Pay to the receipt sheet",
-  "Split the checkout form into two steps",
+  "Add Apple Pay to the billing portal",
+  "Require SSO before an admin can change roles",
+  "Show contract renewal dates on the account page",
 ];
 
 const bridge: { target: () => Promise<string | null>; refresh: () => Promise<void> } = {

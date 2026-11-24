@@ -17,8 +17,8 @@ SEED_VERSION = 3
 
 
 async def seed_demo_if_local(database: Database, database_url: str) -> None:
-    local = "local.db" in database_url or os.environ.get("FACTORY_DEMO_SEED") == "1"
-    if not local:
+    del database_url
+    if os.environ.get("FACTORY_DEMO_SEED") != "1":
         return
     await tidy_repeated_runs(database)
     await seed_demo(database)

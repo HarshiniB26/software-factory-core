@@ -9,6 +9,16 @@ def _chunks(summary: str) -> list[str]:
     return chunks[:3] or [summary.strip() or "implement the request"]
 
 
+def _capabilities(goal: str) -> list[str]:
+    lowered = goal.lower()
+    caps = ["change the repository to meet the step goal"]
+    if "test" in lowered:
+        caps.append("add or update tests")
+    if any(word in lowered for word in ("api", "health", "endpoint")):
+        caps.append("change an HTTP handler")
+    return caps
+
+
 def _touch(goal: str) -> list[str]:
     lowered = goal.lower()
     if any(word in lowered for word in ("migration", "schema", "lock")):
@@ -39,6 +49,8 @@ class DefaultPlanner:
                     touch=touch,
                     checks=list(spec.checks),
                     risk="high" if touch == ["migrations/"] else "low",
+                    role="implementer",
+                    capabilities=_capabilities(goal),
                 )
             )
             if touch == ["migrations/"]:

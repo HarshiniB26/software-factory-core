@@ -650,6 +650,11 @@ export interface components {
              * @default high_risk
              */
             plan_approval: string;
+            /**
+             * Clarification
+             * @default major
+             */
+            clarification: string;
             /** Roles */
             roles?: {
                 [key: string]: {

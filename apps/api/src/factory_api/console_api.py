@@ -62,6 +62,7 @@ class DisconnectBody(BaseModel):
 
 class SettingsBody(BaseModel):
     plan_approval: str = "high_risk"
+    clarification: str = "major"
     roles: dict[str, dict[str, str]] = Field(default_factory=dict)
 
 
@@ -706,6 +707,7 @@ async def skills(request: Request) -> dict[str, Any]:
 def _default_settings() -> dict[str, Any]:
     return {
         "plan_approval": "high_risk",
+        "clarification": "major",
         "roles": {
             "researcher": {"harness": "claude-code", "model": "claude-haiku"},
             "implementer": {"harness": "claude-code", "model": "claude-sonnet"},
@@ -723,6 +725,8 @@ async def read_settings(request: Request) -> dict[str, Any]:
     merged = _default_settings()
     if isinstance(stored.get("plan_approval"), str):
         merged["plan_approval"] = stored["plan_approval"]
+    if isinstance(stored.get("clarification"), str):
+        merged["clarification"] = stored["clarification"]
     if isinstance(stored.get("roles"), dict):
         for role, value in stored["roles"].items():
             if isinstance(value, dict):
@@ -742,6 +746,11 @@ async def write_settings(body: SettingsBody, request: Request) -> dict[str, Any]
         raise HTTPException(
             status_code=422,
             detail="plan_approval must be always, high_risk, or never",
+        )
+    if body.clarification not in {"always", "assume", "major"}:
+        raise HTTPException(
+            status_code=422,
+            detail="clarification must be always, assume, or major",
         )
     database: Database = request.app.state.database
     payload = body.model_dump()
