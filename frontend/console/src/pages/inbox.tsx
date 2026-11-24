@@ -29,18 +29,18 @@ export function InboxPage() {
             <p className="mt-1 text-base font-medium">{item.question || item.title}</p>
             <p className="mt-1 text-sm text-zinc-500">{item.title}</p>
             <div className="mt-3 flex gap-2">
-              {item.status === "parked" ? (
+              {item.execution_mode !== "live" && item.status === "parked" ? (
                 <Button size="sm" onClick={() => api.answer(item.id, "Use the smallest change").then(load).then(() => toast.success("Answer sent"))}>
                   Use the smallest change
                 </Button>
               ) : null}
-              {item.status === "awaiting_approval" ? (
+              {item.execution_mode !== "live" && item.status === "awaiting_approval" ? (
                 <>
                   <Button size="sm" onClick={() => api.decide(item.id, "approve").then(load).then(() => toast.success("Plan approved"))}>Approve</Button>
                   <Button size="sm" variant="secondary" onClick={() => api.decide(item.id, "reject").then(load).then(() => toast.success("Plan rejected"))}>Reject</Button>
                 </>
               ) : null}
-              <Link to={`/runs/${item.id}`} className="self-center text-sm underline">Open run</Link>
+              <Link to={`/runs/${item.id}`} className="self-center text-sm underline">{item.execution_mode === "live" ? item.status === "parked" ? "Answer in conversation" : "Review plan and evidence" : "Open run"}</Link>
             </div>
           </li>
         ))}

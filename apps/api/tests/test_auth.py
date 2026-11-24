@@ -79,3 +79,50 @@ async def test_cloudflare_access_jwt_sets_roles(
     assert response.json()["id"] == "ada@example.com"
     assert "admin" in response.json()["roles"]
     os.environ.pop("FACTORY_AUTH_MODE", None)
+
+
+async def test_production_rejects_unsigned_admin_and_scopes_requests(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from factory_contracts import Principal, RequestCreate
+    from factory_contracts.sessions import issue_token
+
+    monkeypatch.setenv("FACTORY_AUTH_MODE", "github")
+    own = await database.create_request(RequestCreate(title="Own", body="Test", requester="alice"))
+    other = await database.create_request(
+        RequestCreate(title="Other", body="Test", requester="bob")
+    )
+    app = create_app(database, FakeOrchestrator())
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        assert (
+            await client.get("/requests", headers={"authorization": "Bearer admin"})
+        ).status_code == 401
+        headers = {
+            "authorization": "Bearer " + issue_token(Principal(id="alice", roles=["requester"]))
+        }
+        listed = await client.get("/requests", headers=headers)
+        assert [item["id"] for item in listed.json()] == [str(own.id)]
+        assert (await client.get(f"/requests/{other.id}/view", headers=headers)).status_code == 404
+        assert (
+            await client.get(f"/requests/{other.id}/events/history", headers=headers)
+        ).status_code == 404
+        assert (await client.get("/learning", headers=headers)).status_code == 403
+        assert (await client.get("/monitor", headers=headers)).status_code == 403
+
+
+def test_sessions_expire_and_production_rejects_default_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import time
+
+    from factory_contracts import Principal
+    from factory_contracts.sessions import issue_token, read_token, session_secret
+
+    token = issue_token(Principal(id="alice", roles=["requester"]))
+    now = time.time()
+    monkeypatch.setattr(time, "time", lambda: now + 28801)
+    assert read_token(token) is None
+    monkeypatch.setenv("FACTORY_AUTH_MODE", "github")
+    monkeypatch.delenv("FACTORY_SESSION_SECRET")
+    with pytest.raises(ValueError, match="strong FACTORY_SESSION_SECRET"):
+        session_secret()

@@ -1,3 +1,5 @@
+# Legacy module pipeline, used only with FACTORY_EXECUTION_MODE=demo.
+# Live execution requires harness-t3 and skills-git; see docs/live-runtime.md.
 # Repo config for this factory. Run overrides beat this file, which beats org, which beats defaults.
 modules:
   orchestrator: orchestrator-temporal

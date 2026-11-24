@@ -3,7 +3,7 @@ name = "factory-pipeline"
 version = "0.1.0"
 description = "Vendor-free factory pipeline: clarify, plan, schedule, gate, and open PRs."
 requires-python = ">=3.12"
-dependencies = ["factory-contracts", "factory-core"]
+dependencies = ["factory-contracts", "factory-core", "httpx>=0.28"]
 
 [build-system]
 requires = ["hatchling"]

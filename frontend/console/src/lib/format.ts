@@ -36,7 +36,8 @@ export function formatWhen(value: string): string {
   }).format(date);
 }
 
-export function money(usd: number): string {
+export function money(usd: number | null | undefined): string {
+  if (usd == null) return "Unavailable";
   return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(usd);
 }
 

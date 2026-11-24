@@ -5,6 +5,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster } from "sonner";
 import { BoardPage } from "@/pages/board";
 import { CostPage } from "@/pages/cost";
+import { OperationsPage } from "@/pages/operations";
 import { HomePage } from "@/pages/home";
 import { InboxPage } from "@/pages/inbox";
 import { RegistryPage } from "@/pages/registry";
@@ -28,6 +29,7 @@ export function App() {
               <Route path="registry" element={<RegistryPage />} />
               <Route path="repos" element={<ReposPage />} />
               <Route path="cost" element={<CostPage />} />
+              <Route path="operations" element={<OperationsPage />} />
               <Route path="settings" element={<SettingsPage />} />
             </Route>
           </Routes>

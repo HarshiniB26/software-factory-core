@@ -1,0 +1,6 @@
+id: harness-t3
+version: 0.1.0
+implements: HarnessAdapter@1
+capabilities: [streaming, worktrees, persistent-session]
+permissions: [run-agent]
+testing: external

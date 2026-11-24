@@ -1,3 +1,4 @@
+import { RuntimeSettings } from "@/components/runtime-settings";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/components/shell";
@@ -13,14 +14,16 @@ export function SettingsPage() {
   const { theme, toggle } = useTheme();
   const [modules, setModules] = useState<{ id: string; version: string; implements: string }[]>([]);
   const [selected, setSelected] = useState<Record<string, string | string[]>>({});
-  const [cost, setCost] = useState<{ pull_requests: number; estimated_usd: number } | null>(null);
+  const [cost, setCost] = useState<{ pull_requests: number; estimated_usd: number | null } | null>(null);
   const [killed, setKilled] = useState(false);
   const [confirmKill, setConfirmKill] = useState(false);
   const [user, setUser] = useState("");
   const [workspace, setWorkspace] = useState<WorkspaceSettings | null>(null);
+  const [executionMode, setExecutionMode] = useState("live");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    void api.runtime().then((runtime) => setExecutionMode(runtime.execution_mode));
     Promise.all([api.modules(), api.cost(), api.audit(), api.settings()])
       .then(([moduleList, spend, audit, settings]) => {
         setModules(moduleList.installed);
@@ -50,6 +53,7 @@ export function SettingsPage() {
       <p className="mt-1 text-sm text-zinc-500">Workspace, spend, and the kill switch. Pull requests stay unmerged.</p>
       {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
 
+      <RuntimeSettings />
       <section className="mt-8">
         <h2 className="text-sm font-medium">Appearance</h2>
         <Button className="mt-3" variant="secondary" onClick={toggle}>
@@ -57,9 +61,9 @@ export function SettingsPage() {
         </Button>
       </section>
 
-      <section className="mt-8">
+      {executionMode === "demo" ? (<section className="mt-8">
         <h2 className="text-sm font-medium">Roles</h2>
-        <p className="mt-1 text-sm text-zinc-500">Harness and model shown on each agent card. Dev mode still runs locally, without a live key.</p>
+        <p className="mt-1 text-sm text-zinc-500">Legacy demo role settings. Live execution uses the single runtime selected above.</p>
         {workspace ? (
           <form
             className="mt-3 space-y-3"
@@ -124,7 +128,7 @@ export function SettingsPage() {
         ) : (
           <div className="mt-3 h-24 animate-pulse rounded-xl bg-zinc-200 dark:bg-zinc-800" />
         )}
-      </section>
+      </section>) : null}
 
       <section id="github" className="mt-8 scroll-mt-8">
         <h2 className="text-sm font-medium">GitHub</h2>
@@ -181,7 +185,7 @@ export function SettingsPage() {
       <section className="mt-8">
         <h2 className="text-sm font-medium">Spend</h2>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          {cost ? `${cost.pull_requests} pull requests · ${money(cost.estimated_usd)} fixture estimate` : "Loading spend"}
+          {cost ? `${cost.pull_requests} pull requests · ${cost.estimated_usd === null ? "billing unavailable" : money(cost.estimated_usd) + " demo estimate"}` : "Loading spend"}
         </p>
       </section>
 

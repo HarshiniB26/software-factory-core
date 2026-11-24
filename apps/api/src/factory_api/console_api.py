@@ -7,12 +7,12 @@ from uuid import UUID
 
 from factory_contracts import FACTORY_WORKFLOW, Principal, RequestCreate
 from factory_contracts.sessions import issue_token, read_token
-from factory_core import Database, Settings, get_database, load_modules, resolve_config
+from factory_core import Database, Settings, load_modules, resolve_config
 from factory_pipeline.service import KILL_KEY, blank_state, classify_follow_up
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from factory_api.access import principal_from_access
+from factory_api.access import principal_from_access, roles_for
 from factory_api.github_account import (
     cached_repos,
     decrypt_token,
@@ -107,8 +107,23 @@ def repo_catalog(root: Path) -> list[dict[str, Any]]:
     return repos
 
 
-async def default_target(database: Database) -> str | None:
-    connected = await database.get_state(CONNECTED_KEY) or {}
+def connected_key(user: str = "local") -> str:
+    if os.environ.get("FACTORY_AUTH_MODE", "dev") == "dev":
+        return CONNECTED_KEY
+    return f"{CONNECTED_KEY}:{user}"
+
+
+async def visible_requests(database: Database, principal: Principal) -> list[Any]:
+    rows = await database.list_requests()
+    if os.environ.get("FACTORY_AUTH_MODE", "dev") == "dev" or {"admin", "approver"} & set(
+        principal.roles
+    ):
+        return rows
+    return [row for row in rows if row.requester == principal.id]
+
+
+async def default_target(database: Database, user: str = "local") -> str | None:
+    connected = await database.get_state(connected_key(user)) or {}
     chosen = connected.get("path") or connected.get("full_name")
     if isinstance(chosen, str) and chosen:
         return chosen
@@ -130,10 +145,12 @@ def _principal(request: Request) -> Principal:
         token = header.split(" ", 1)[1].strip()
         signed = read_token(token)
         if signed is not None:
+            if os.environ.get("FACTORY_AUTH_MODE", "dev") != "dev":
+                return Principal(id=signed.id, roles=roles_for(signed.id))  # type: ignore[arg-type]
             return signed
-        if token == "admin":
+        if token == "admin" and os.environ.get("FACTORY_AUTH_MODE", "dev") == "dev":
             return Principal(id="admin", roles=["admin"])
-        if token:
+        if token and os.environ.get("FACTORY_AUTH_MODE", "dev") == "dev":
             return Principal(id=token, roles=["requester"])
     if os.environ.get("FACTORY_AUTH_MODE", "dev") == "dev":
         return Principal(id="local", roles=["requester", "approver", "admin"])
@@ -143,6 +160,10 @@ def _principal(request: Request) -> Principal:
 def _require(principal: Principal, role: str) -> None:
     if role not in principal.roles and "admin" not in principal.roles:
         raise HTTPException(status_code=403, detail=f"{role} role required")
+
+
+principal = _principal
+require_role = _require
 
 
 @router.post("/auth/dev-login")
@@ -190,9 +211,11 @@ async def _repo_payload(request: Request) -> dict[str, Any]:
         for item in repo_catalog(Settings().repo_root)
         if item["kind"] == "local" or not github_repos
     ]
-    if github_repos:
+    if os.environ.get("FACTORY_AUTH_MODE", "dev") != "dev":
+        catalog = github_repos
+    elif github_repos:
         catalog = [item for item in catalog if item["kind"] == "local"] + github_repos
-    connected = await database.get_state(CONNECTED_KEY)
+    connected = await database.get_state(connected_key(_principal(request).id))
     if isinstance(connected, dict) and connected.get("full_name"):
         connected = public_repo(connected)
     else:
@@ -205,6 +228,20 @@ async def _repo_payload(request: Request) -> dict[str, Any]:
         "github": github_public(stored),
         "install_url": install_url(),
     }
+
+
+@router.get("/runtime/providers")
+async def runtime_providers(request: Request) -> dict[str, Any]:
+    _principal(request)
+    from factory_core import instantiate
+
+    modules = {item.manifest.id: item for item in load_modules()}
+    try:
+        harness = await instantiate(modules["harness-t3"], {})
+        providers = await harness.catalog()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="T3 provider catalog is unavailable") from exc
+    return {"execution_mode": Settings().execution_mode, "providers": providers}
 
 
 @router.get("/repos")
@@ -278,7 +315,7 @@ async def connect_repo(body: ConnectBody, request: Request) -> dict[str, Any]:
     branch = body.branch or chosen.get("default_branch")
     if isinstance(branch, str) and branch:
         chosen["branch"] = branch
-    await database.put_state(CONNECTED_KEY, chosen)
+    await database.put_state(connected_key(_principal(request).id), chosen)
     return public_repo(chosen)
 
 
@@ -286,10 +323,10 @@ async def connect_repo(body: ConnectBody, request: Request) -> dict[str, Any]:
 async def disconnect_repo(body: DisconnectBody, request: Request) -> dict[str, Any]:
     _principal(request)
     database: Database = request.app.state.database
-    connected = await database.get_state(CONNECTED_KEY) or {}
+    connected = await database.get_state(connected_key(_principal(request).id)) or {}
     if connected.get("full_name") != body.full_name:
         raise HTTPException(status_code=404, detail="repository is not connected")
-    await database.put_state(CONNECTED_KEY, {})
+    await database.put_state(connected_key(_principal(request).id), {})
     return {"disconnected": body.full_name}
 
 
@@ -298,9 +335,9 @@ async def disconnect_github(request: Request) -> dict[str, bool]:
     principal = _principal(request)
     database: Database = request.app.state.database
     await forget(database, principal.id)
-    connected = await database.get_state(CONNECTED_KEY) or {}
+    connected = await database.get_state(connected_key(_principal(request).id)) or {}
     if connected.get("kind") == "github":
-        await database.put_state(CONNECTED_KEY, {})
+        await database.put_state(connected_key(_principal(request).id), {})
     return {"disconnected": True}
 
 
@@ -314,36 +351,64 @@ async def run_view(request_id: UUID, request: Request) -> dict[str, Any]:
     state = await database.get_state(f"run:{request_id}") or {}
     messages = await database.list_messages(request_id)
     events = await database.read(request_id)
+    demo = state.get("execution_mode", Settings().execution_mode) == "demo"
     raw_diff = str(state.get("diff") or "").strip()
     meaningful = raw_diff.replace("HEAD", "").strip()
-    if not meaningful or "@@" not in raw_diff:
+    if demo and (not meaningful or "@@" not in raw_diff):
         steps = list((state.get("plan") or {}).get("steps") or [])
         goal = str(steps[0].get("goal") if steps else found.body)
         diff = _fixture_preview(goal)
         diff_kind = "fixture"
     else:
         diff = raw_diff
-        diff_kind = "git"
+        diff_kind = "git" if raw_diff else "unavailable"
     return {
         "request": found.model_dump(mode="json"),
         "messages": [item.model_dump(mode="json") for item in messages],
         "events": [item.model_dump(mode="json") for item in events],
         "diff": diff,
         "diff_kind": diff_kind,
-        "gates": _named_gates(list(state.get("gates") or [])),
+        "execution_mode": "demo" if demo else "live",
+        "failure": state.get("failure"),
+        "thread_id": state.get("thread_id"),
+        "verification": state.get("verification", []),
+        "usage_available": demo,
+        "project_type": state.get("project_type", "brownfield"),
+        "provider": state.get("provider"),
+        "model": state.get("model"),
+        "active_seconds": state.get("active_seconds", 0),
+        "verified_sha": state.get("verified_sha"),
+        "baseline": state.get("baseline", []),
+        "plan_details": state.get("grounded_plan"),
+        "pending_operation": state.get("pending_operation"),
+        "approval_reason": state.get("approval_reason"),
+        "approval_next": state.get("approval_next"),
+        "ci": state.get("ci"),
+        "learning_proposal": state.get("learning_proposal"),
+        "gates": (
+            _named_gates(list(state.get("gates") or [])) if demo else list(state.get("gates") or [])
+        ),
         "agent": state.get("agent"),
         "prs": state.get("prs") or [],
         "risk": state.get("risk", "low"),
         "risk_score": state.get("risk_score", 0),
         "assumptions": state.get("assumptions") or [],
         "questions": state.get("questions") or [],
-        "stage": state.get("stage"),
+        "stage": state.get("live_stage") or state.get("stage"),
         "steps": list((state.get("plan") or {}).get("steps") or []),
-        "crew": _present_crew(
-            list(state.get("crew") or []),
-            list((state.get("plan") or {}).get("steps") or []),
+        "crew": (
+            _present_crew(
+                list(state.get("crew") or []),
+                list((state.get("plan") or {}).get("steps") or []),
+            )
+            if demo
+            else list(state.get("crew") or [])
         ),
-        "logs": _present_logs(list(state.get("logs") or []), found.body),
+        "logs": (
+            _present_logs(list(state.get("logs") or []), found.body)
+            if demo
+            else list(state.get("logs") or [])
+        ),
         "files": _demo_files(found.body) if diff_kind == "fixture" else [],
     }
 
@@ -587,7 +652,7 @@ async def follow_up(request_id: UUID, body: FollowBody, request: Request) -> dic
 async def inbox(request: Request) -> dict[str, Any]:
     _principal(request)
     database: Database = request.app.state.database
-    rows = await database.list_requests()
+    rows = await visible_requests(database, _principal(request))
     waiting = []
     for row in rows:
         if row.status not in {"parked", "awaiting_approval"}:
@@ -597,12 +662,13 @@ async def inbox(request: Request) -> dict[str, Any]:
         questions = state.get("questions") or []
         item["question"] = questions[0]["text"] if questions else row.title
         item["kind"] = "approval" if row.status == "awaiting_approval" else "question"
+        item["execution_mode"] = state.get("execution_mode", Settings().execution_mode)
         waiting.append(item)
     return {"items": waiting}
 
 
 def _board_stage(status: str, state: dict[str, Any]) -> str:
-    stage = str(state.get("stage") or "")
+    stage = str(state.get("live_stage") or state.get("stage") or "")
     if status == "created":
         return "queued"
     if status in {"parked", "awaiting_approval"}:
@@ -612,9 +678,9 @@ def _board_stage(status: str, state: dict[str, Any]) -> str:
     if status == "completed":
         return "pr" if state.get("prs") else "done"
     if status == "running":
-        if stage in {"execute", "assemble"}:
+        if stage in {"execute", "assemble", "implement"}:
             return "building"
-        if stage == "gates":
+        if stage in {"gates", "verify", "review"}:
             return "gates"
         return "planning"
     if stage == "plan":
@@ -627,7 +693,7 @@ async def board(request: Request) -> dict[str, Any]:
     _principal(request)
     database: Database = request.app.state.database
     cards = []
-    for row in await database.list_requests():
+    for row in await visible_requests(database, _principal(request)):
         state = await database.get_state(f"run:{row.id}") or {}
         crew = state.get("crew") or []
         cost = round(sum(float(item.get("usd") or 0) for item in crew), 3)
@@ -639,9 +705,13 @@ async def board(request: Request) -> dict[str, Any]:
                 "stage": _board_stage(row.status, state),
                 "target": row.target,
                 "created_at": row.created_at.isoformat(),
-                "cost_usd": cost,
-                "duration_seconds": state.get("duration_seconds") or 0,
-                "model": (crew[1].get("model") if len(crew) > 1 else None),
+                "cost_usd": cost
+                if state.get("execution_mode", Settings().execution_mode) == "demo"
+                else None,
+                "duration_seconds": state.get("active_seconds")
+                or state.get("duration_seconds")
+                or 0,
+                "model": state.get("model") or (crew[1].get("model") if len(crew) > 1 else None),
             }
         )
     return {"items": cards}
@@ -652,7 +722,7 @@ async def prs(request: Request) -> dict[str, Any]:
     _principal(request)
     database: Database = request.app.state.database
     items: list[dict[str, Any]] = []
-    for row in await database.list_requests():
+    for row in await visible_requests(database, _principal(request)):
         state = await database.get_state(f"run:{row.id}") or {}
         for pull in state.get("prs") or []:
             items.append({**pull, "request_id": str(row.id), "risk": state.get("risk", "low")})
@@ -679,18 +749,18 @@ async def modules(request: Request) -> dict[str, Any]:
 @router.get("/registry/agents")
 async def agents(request: Request) -> dict[str, Any]:
     _principal(request)
-    database = get_database()
+    database: Database = request.app.state.database
     specs = await database.list_agents()
     return {
         "agents": [spec.model_dump(mode="json") for spec in specs],
-        "catalog": _agent_catalog(),
+        "catalog": _agent_catalog() if Settings().execution_mode == "demo" else [],
     }
 
 
 @router.get("/registry/skills")
 async def skills(request: Request) -> dict[str, Any]:
     _principal(request)
-    database = get_database()
+    database: Database = request.app.state.database
     specs = await database.list_skills()
     if specs:
         return {"skills": [spec.model_dump(mode="json") for spec in specs]}
@@ -761,6 +831,10 @@ async def write_settings(body: SettingsBody, request: Request) -> dict[str, Any]
 @router.post("/registry/promote")
 async def promote(body: PromoteBody, request: Request) -> dict[str, Any]:
     _require(_principal(request), "approver")
+    if Settings().execution_mode == "live":
+        raise HTTPException(
+            status_code=409, detail="Use measured learning evaluations for promotion"
+        )
     from factory_pipeline.evals import promotion_allowed
 
     allowed, reason = promotion_allowed(
@@ -811,7 +885,9 @@ async def cost(request: Request) -> dict[str, Any]:
     database: Database = request.app.state.database
     events = await database.list_events(500)
     opened = [event for event in events if event.type == "pr.opened"]
-    rows = await database.list_requests()
+    rows = await visible_requests(database, _principal(request))
+    allowed_ids = {row.id for row in rows}
+    opened = [item for item in opened if item.request_id in allowed_ids]
     by_day: dict[str, dict[str, float]] = {}
     durations: list[float] = []
     successes = 0
@@ -845,8 +921,8 @@ async def cost(request: Request) -> dict[str, Any]:
             if row.status == "completed":
                 successes += 1
                 bucket["successes"] = float(bucket["successes"]) + 1
-        if state.get("duration_seconds"):
-            seconds = float(state["duration_seconds"])
+        if state.get("active_seconds") or state.get("duration_seconds"):
+            seconds = float(state.get("active_seconds") or state["duration_seconds"])
             durations.append(seconds)
             bucket["duration_total"] = float(bucket["duration_total"]) + seconds
         for member in crew:
@@ -873,7 +949,8 @@ async def cost(request: Request) -> dict[str, Any]:
         total += float(item["usd"])
     return {
         "pull_requests": len(opened),
-        "estimated_usd": round(total, 3),
+        "estimated_usd": round(total, 3) if Settings().execution_mode == "demo" else None,
+        "usage_available": Settings().execution_mode == "demo",
         "series": series,
         "success_rate": round(successes / finished, 3) if finished else 0,
         "average_duration_seconds": round(sum(durations) / len(durations), 1) if durations else 0,
@@ -886,6 +963,8 @@ async def audit(request: Request) -> dict[str, Any]:
     _principal(request)
     database: Database = request.app.state.database
     events = await database.list_events(200)
+    allowed_ids = {row.id for row in await visible_requests(database, _principal(request))}
+    events = [event for event in events if event.request_id in allowed_ids]
     killed = await database.get_state(KILL_KEY) or {}
     return {
         "events": [event.model_dump(mode="json") for event in events],
@@ -940,6 +1019,25 @@ async def github_issue(request: Request) -> dict[str, Any]:
 
 @router.post("/apps/new", status_code=201)
 async def new_app(body: NewAppBody, request: Request) -> dict[str, str]:
+    if Settings().execution_mode == "live":
+        from factory_api.main import create_request
+
+        actor = _principal(request)
+        target = await default_target(request.app.state.database, actor.id)
+        if not target:
+            raise HTTPException(
+                status_code=409, detail="Select a repository for the new application"
+            )
+        created = await create_request(
+            RequestCreate(
+                title=f"New app {body.name}",
+                body=body.description,
+                target=target,
+                project_type="greenfield",
+            ),
+            request,
+        )
+        return {"id": str(created.id)}
     principal = _principal(request)
     database: Database = request.app.state.database
     created = await database.create_request(

@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = ["factory-contracts", "factory-core", "factory-pipeline", "temporalio>=1.9"]
 
 [project.scripts]
+factory-monitor = "factory_worker.monitor:main"
 factory-worker = "factory_worker.main:main"
 
 [build-system]

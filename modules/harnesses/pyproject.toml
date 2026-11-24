@@ -3,7 +3,7 @@ name = "factory-harnesses"
 version = "0.1.0"
 description = "Claude Code and Codex harness adapters."
 requires-python = ">=3.12"
-dependencies = ["factory-contracts"]
+dependencies = ["factory-contracts", "httpx>=0.28"]
 
 [project.optional-dependencies]
 claude = ["claude-agent-sdk"]
@@ -11,6 +11,7 @@ codex = ["openai-codex"]
 
 [project.entry-points."factory.modules"]
 harness-claude-code = "factory_harnesses.claude:ClaudeHarness"
+harness-t3 = "factory_harnesses.t3:T3Harness"
 harness-codex = "factory_harnesses.codex:CodexHarness"
 
 [build-system]

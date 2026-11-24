@@ -19,9 +19,21 @@ import { ArrowUp, Github } from "lucide-react";
 import { useState } from "react";
 
 const SUGGESTIONS = [
-  "Add Apple Pay to the billing portal",
-  "Require SSO before an admin can change roles",
-  "Show contract renewal dates on the account page",
+  {
+    title: "Billing",
+    detail: "Add Apple Pay to the billing portal",
+    text: "Add Apple Pay to the billing portal",
+  },
+  {
+    title: "Access",
+    detail: "Require SSO before an admin can change roles",
+    text: "Require SSO before an admin can change roles",
+  },
+  {
+    title: "Accounts",
+    detail: "Show contract renewal dates on the account page",
+    text: "Show contract renewal dates on the account page",
+  },
 ];
 
 const bridge: { target: () => Promise<string | null>; refresh: () => Promise<void> } = {
@@ -64,8 +76,8 @@ export function ChatThread() {
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ThreadPrimitive.Root className="flex h-full min-h-0 flex-col">
-        <ThreadPrimitive.Viewport className="min-h-0 flex-1 overflow-auto px-4 py-8">
-          <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+        <ThreadPrimitive.Viewport className="min-h-0 flex-1 overflow-auto px-6 py-10">
+          <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
             <ThreadPrimitive.Empty>
               <EmptyState />
             </ThreadPrimitive.Empty>
@@ -114,7 +126,7 @@ function ComposerBar() {
           </button>
         </div>
       )}
-      <ComposerPrimitive.Root className="surface mx-auto flex w-full max-w-3xl flex-col rounded-2xl p-2">
+      <ComposerPrimitive.Root className="surface mx-auto flex w-full max-w-4xl flex-col rounded-xl p-3">
         <ComposerPrimitive.Input
           data-composer
           placeholder="Describe the issue"
@@ -122,9 +134,9 @@ function ComposerBar() {
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey && !ready) setHint(true);
           }}
-          className="max-h-40 min-h-11 w-full resize-none bg-transparent px-2 py-2 text-sm outline-none"
+          className="max-h-40 min-h-16 w-full resize-none bg-transparent px-2 py-2 text-sm outline-none"
         />
-        <div className="flex items-center justify-between gap-2 px-1 pt-1">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1 pt-1">
           <RepoPicker
             repos={session.repos}
             connected={selected}
@@ -165,7 +177,7 @@ function ComposerBar() {
           </p>
         ) : null}
       </ComposerPrimitive.Root>
-      <p className="mx-auto mt-2 max-w-3xl text-center text-xs text-zinc-400">Enter to send · ⌘K for commands</p>
+      <p className="mx-auto mt-2 max-w-4xl text-xs text-zinc-400">Enter to send. ⌘K opens commands.</p>
     </div>
   );
 }
@@ -174,25 +186,20 @@ function EmptyState() {
   const composer = useComposerRuntime();
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex min-h-[46vh] flex-col justify-center">
-      <div className="mb-5 flex items-center gap-3">
-        <span className="relative grid h-10 w-10 place-items-center">
-          <span className="absolute h-9 w-9 rounded-full bg-[var(--accent)]" />
-          <span className="absolute h-6 w-6 translate-x-1.5 rounded-full bg-[var(--accent-2)]" />
-        </span>
-        <p className="wordmark text-sm font-semibold tracking-tight">Factory</p>
-      </div>
-      <h1 className="wordmark text-4xl font-semibold tracking-tight">What should we change?</h1>
-      <p className="mt-3 max-w-lg text-sm leading-6 text-zinc-500">
-        Describe the issue. A crew plans the work, checks it, and opens a pull request. It never merges.
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">New issue</p>
+      <h1 className="mt-3 max-w-2xl text-4xl font-semibold tracking-tight">What should we change?</h1>
+      <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-500">
+        Describe the outcome. The factory reads the repository, asks when needed, and verifies the change. Pull requests stay yours to merge.
       </p>
-      <div className="mt-6 flex flex-wrap gap-2">
-        {SUGGESTIONS.map((text) => (
+      <div className="mt-8 grid gap-3 sm:grid-cols-3">
+        {SUGGESTIONS.map((item) => (
           <button
-            key={text}
-            className="surface rounded-full px-3 py-1.5 text-left text-sm hover:border-[var(--accent)]"
-            onClick={() => composer.setText(text)}
+            key={item.title}
+            className="surface rounded-xl px-4 py-4 text-left transition hover:border-[#1f3a5f]"
+            onClick={() => composer.setText(item.text)}
           >
-            {text}
+            <span className="text-xs font-semibold uppercase tracking-wide text-[#1f3a5f] dark:text-[#8fb4e0]">{item.title}</span>
+            <span className="mt-2 block text-sm leading-5">{item.detail}</span>
           </button>
         ))}
       </div>
@@ -202,7 +209,7 @@ function EmptyState() {
 
 function UserBubble() {
   return (
-    <div className="ml-auto max-w-[85%] rounded-2xl bg-[var(--accent)] px-4 py-2.5 text-sm text-white">
+    <div className="ml-auto max-w-[85%] rounded-lg bg-[#1f3a5f] px-4 py-2.5 text-sm text-white">
       <MessagePrimitive.Content />
     </div>
   );

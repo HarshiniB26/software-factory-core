@@ -1,5 +1,7 @@
 """Read pinned SKILL.md files and reject secrets or disallowed licenses."""
 
+import hashlib
+import json
 from pathlib import Path
 
 import yaml
@@ -20,13 +22,7 @@ class GitSkillSource:
     async def list(self) -> list[SkillRef]:
         refs: list[SkillRef] = []
         if not self._root.is_dir():
-            return [
-                SkillRef(
-                    ref="example/tdd@0.1.0",
-                    license="MIT",
-                    description="Write a failing test first.",
-                )
-            ]
+            raise ContractError("Pinned skills directory is missing")
         for path in sorted(self._root.glob("*/SKILL.md")):
             meta = _meta(path)
             skill_id = str(meta.get("id") or meta.get("name") or path.parent.name)
@@ -39,19 +35,35 @@ class GitSkillSource:
                     description=str(meta.get("description", "")),
                 )
             )
-        return refs or [
-            SkillRef(
-                ref="example/tdd@0.1.0", license="MIT", description="Write a failing test first."
-            )
-        ]
+        return refs
 
     async def fetch(self, ref: str) -> SkillBundle:
         path = self._find(ref)
         if path is None:
-            if ref == "example/tdd@0.1.0":
-                return SkillBundle(ref=ref, content="# tdd\nWrite a failing test first.\n")
-            raise ContractError(f"unknown skill {ref}")
-        return SkillBundle(ref=ref, content=path.read_text(encoding="utf-8"))
+            raise ContractError(f"unknown or unpinned skill {ref}")
+        self._check_integrity(path.parent)
+        content = path.read_text(encoding="utf-8")
+        for support in sorted(path.parent.rglob("*.md")):
+            if support.name in {"SKILL.md", "ATTRIBUTION.md"}:
+                continue
+            content += f"\n\n## Supporting reference: {support.relative_to(path.parent)}\n"
+            content += support.read_text(encoding="utf-8")
+        return SkillBundle(ref=ref, content=content)
+
+    def _check_integrity(self, directory: Path) -> None:
+        manifest = self._root / "integrity.json"
+        if not manifest.is_file():
+            raise ContractError("Pinned skill integrity manifest is missing")
+        expected = json.loads(manifest.read_text())
+        prefix = directory.name + "/"
+        entries = {key: value for key, value in expected.items() if key.startswith(prefix)}
+        actual = {
+            str(path.relative_to(self._root)): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in directory.rglob("*")
+            if path.is_file()
+        }
+        if not entries or actual != entries:
+            raise ContractError("Pinned skill content failed integrity verification")
 
     async def verify(self, ref: str) -> VerifyResult:
         bundle = await self.fetch(ref)
@@ -68,11 +80,12 @@ class GitSkillSource:
         return VerifyResult(ref=ref, ok=not findings, license=license_name, findings=findings)
 
     def _find(self, ref: str) -> Path | None:
-        wanted = ref.split("@", 1)[0].split("/")[-1]
         for path in self._root.glob("*/SKILL.md"):
             meta = _meta(path)
             skill_id = str(meta.get("id") or meta.get("name") or path.parent.name)
-            if skill_id == wanted or path.parent.name.endswith(wanted):
+            source = "superpowers" if path.parent.name.startswith("superpowers-") else "pstack"
+            sha = str(meta.get("sha") or PINNED_SHA[source])
+            if ref == f"{source}/{skill_id}@{sha}":
                 return path
         return None
 

@@ -2,6 +2,9 @@ import type { paths } from "./schema";
 import createClient from "openapi-fetch";
 import {
   ApiError,
+  type RuntimeInfo,
+  type MonitorInfo,
+  type LearningInfo,
   type AgentCard,
   type CostReport,
   type Principal,
@@ -67,6 +70,15 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
 }
 
 export const api = {
+  runtime: () => requestJson<RuntimeInfo>("/runtime"),
+  saveRuntime: (provider: string, model: string, approval = "high_risk") => requestJson<RuntimeInfo>("/runtime", { method: "PUT", body: JSON.stringify({ provider, model, approval }) }),
+  monitor: () => requestJson<MonitorInfo>("/monitor"),
+  learning: () => requestJson<LearningInfo>("/learning"),
+  evaluate: (id: string) => requestJson(`/learning/${encodeURIComponent(id)}/evaluate`, { method: "POST" }),
+  activate: (id: string, evaluationId: string) => requestJson(`/learning/${encodeURIComponent(id)}/promote`, { method: "POST", body: JSON.stringify({ evaluation_id: evaluationId }) }),
+  rollbackLearning: (profile: string) => requestJson(`/learning/${encodeURIComponent(profile)}/rollback`, { method: "POST" }),
+  recover: (id: string) => requestJson(`/requests/${encodeURIComponent(id)}/recover`, { method: "POST" }),
+  acknowledge: (id: string) => requestJson(`/monitor/alerts/${encodeURIComponent(id)}/acknowledge`, { method: "POST" }),
   me: () => unwrap<Principal>(raw.GET("/auth/me", { headers: authHeaders() })),
   login: async (user: string, role: string) => {
     const session = await unwrap<{ token: string; user: string; role: string }>(
@@ -97,12 +109,7 @@ export const api = {
       `/repos/branches?full_name=${encodeURIComponent(fullName)}`,
     ),
   createRequest: (title: string, body: string, target: string | null) =>
-    unwrap<RequestRow>(
-      raw.POST("/requests", {
-        body: { title, body, target, requester: "local" },
-        headers: authHeaders(),
-      }),
-    ),
+    requestJson<RequestRow>("/requests", { method: "POST", body: JSON.stringify({ title, body, target }) }),
   requests: () => unwrap<RequestRow[]>(raw.GET("/requests", { headers: authHeaders() })),
   request: (id: string) => unwrap<RequestRow>(raw.GET("/requests/{request_id}", { params: { path: { request_id: id } }, headers: authHeaders() })),
   view: (id: string) =>

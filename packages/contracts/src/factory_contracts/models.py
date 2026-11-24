@@ -56,6 +56,8 @@ class Attachment(BaseModel):
 
 
 class RequestCreate(BaseModel):
+    project_type: Literal["auto", "brownfield", "greenfield", "modernization"] = "auto"
+    delivery_target: Literal["pr", "verified"] = "pr"
     title: str = Field(min_length=1, max_length=200)
     body: str = Field(min_length=1)
     target: str | None = None
@@ -357,6 +359,10 @@ class ExecResult(BaseModel):
 class TaskSpec(BaseModel):
     instruction: str
     repo: str | None = None
+    branch: str | None = None
+    title: str = ""
+    provider: str | None = None
+    model: str | None = None
 
 
 class HarnessCapabilities(BaseModel):
@@ -373,6 +379,7 @@ class HarnessEvent(BaseModel):
 class HarnessResult(BaseModel):
     status: Literal["ok", "failed", "cancelled"]
     summary: str
+    workspace: str | None = None
 
 
 class ThreadMessage(BaseModel):

@@ -4,7 +4,7 @@ import { api } from "@/lib/api";
 import { money, statusTone } from "@/lib/format";
 import type { AgentCard } from "@/lib/types";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 export function RegistryPage() {
@@ -39,6 +39,7 @@ export function RegistryPage() {
         </div>
         <Button onClick={() => setOpen(true)}>New app</Button>
       </div>
+      {!catalog.length && <p className="mt-6 text-sm text-zinc-500">Live requests use one persistent coding session. <Link className="underline" to="/operations">Review evaluated improvements in Operations.</Link></p>}
       <div className="mt-6 grid gap-3">
         {catalog.map((agent) => (
           <article key={`${agent.id}@${agent.version}`} className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">

@@ -1,10 +1,9 @@
 """One state machine for a request. Vendor calls go through ports."""
 
 import asyncio
+import json
 from typing import Any
 from uuid import UUID
-
-import json
 
 from factory_contracts import (
     ChatMessage,
@@ -27,6 +26,8 @@ from factory_pipeline.merge import merge_preview
 from factory_pipeline.ports import load_ports
 from factory_pipeline.risk import approval_needed, score_risk
 from factory_pipeline.schedule import schedule
+from factory_pipeline.supervision import save as _save_run
+from factory_pipeline.supervision import set_status
 
 KILL_KEY = "policy.kill_switch"
 MAX_CLARIFY_ROUNDS = 2
@@ -73,6 +74,12 @@ def _answer_text(answer: Any) -> str:
 
 
 async def tick(request_id: UUID, hint: dict[str, Any] | None = None) -> dict[str, Any]:
+    from factory_pipeline.supervision import supervised
+
+    return await supervised(get_database(), request_id, lambda: _tick(request_id, hint))
+
+
+async def _tick(request_id: UUID, hint: dict[str, Any] | None = None) -> dict[str, Any]:
     hint = hint or {}
     database = get_database()
     key = f"run:{request_id}"
@@ -92,13 +99,40 @@ async def tick(request_id: UUID, hint: dict[str, Any] | None = None) -> dict[str
 
     killed = await database.get_state(KILL_KEY)
     if killed and killed.get("on"):
-        await database.update_status(request_id, "killed")
+        if state.get("thread_id"):
+            from factory_pipeline.autonomous import selected
+
+            await (await selected("harness-t3")).cancel(state["thread_id"])
+        await set_status(database, request_id, "killed")
         await _event(request_id, "run.killed", {"by": killed.get("by")})
         state["stage"] = "done"
-        await database.put_state(key, state)
+        state["live_stage"] = "done"
+        state["outcome"] = "killed"
+        await _save_run(database, request_id, state)
         return {"status": "killed"}
 
     settings = Settings()
+    execution_mode = state.setdefault("execution_mode", settings.execution_mode)
+    if execution_mode == "live":
+        from factory_pipeline.autonomous import RunKilled, advance
+
+        try:
+            result = await advance(database, request, state, hint)
+        except Exception as exc:
+            state["live_stage"] = "done"
+            state["outcome"] = "killed" if isinstance(exc, RunKilled) else "failed"
+            # Only controlled contract errors are safe to show; vendor errors may contain secrets.
+            detail = str(exc) if isinstance(exc, ContractError) else type(exc).__name__
+            state["failure"] = detail
+            await set_status(database, request_id, state["outcome"])
+            await _event(request_id, "run." + state["outcome"], {"detail": detail})
+            result = {"status": state["outcome"], "detail": detail}
+        await _save_run(database, request_id, state)
+        if result["status"] in {"completed", "failed", "killed"}:
+            from factory_pipeline.learning import outcome
+
+            await outcome(database, request, state)
+        return result
     config = resolve_config(
         settings.repo_root,
         run=state["overrides"] or None,
@@ -123,9 +157,9 @@ async def tick(request_id: UUID, hint: dict[str, Any] | None = None) -> dict[str
             return {"status": "awaiting_approval", "plan": state.get("plan")}
         await _event(request_id, "plan.decided", {"decision": decision})
         if decision == "reject":
-            await database.update_status(request_id, "failed")
+            await set_status(database, request_id, "failed")
             state["stage"] = "done"
-            await database.put_state(key, state)
+            await _save_run(database, request_id, state)
             return {"status": "failed"}
         state["stage"] = "assemble"
 
@@ -145,9 +179,9 @@ async def tick(request_id: UUID, hint: dict[str, Any] | None = None) -> dict[str
             await _publish(database, ports, request_id, request, state)
         else:
             state["stage"] = "done"
-        await database.put_state(key, state)
+        await _save_run(database, request_id, state)
 
-    await database.put_state(key, state)
+    await _save_run(database, request_id, state)
     status = {
         "parked": "parked",
         "awaiting_approval": "awaiting_approval",
@@ -284,7 +318,7 @@ async def _clarify(
     if still_open:
         state["questions"] = questions
         state["stage"] = "parked"
-        await database.update_status(request_id, "parked")
+        await set_status(database, request_id, "parked")
         body = "\n".join(question["text"] for question in questions)
         await database.add_message(
             request_id, "assistant", "question", body, {"questions": questions}
@@ -355,7 +389,7 @@ async def _plan(
     mode = str(flags.get("plan_approval", "high_risk"))
     if approval_needed(mode, level):
         state["stage"] = "awaiting_approval"
-        await database.update_status(request_id, "awaiting_approval")
+        await set_status(database, request_id, "awaiting_approval")
         return
     state["stage"] = "assemble"
 
@@ -629,7 +663,7 @@ async def _publish(
         )
     )
     failed = bool(state.get("gate_failed"))
-    await database.update_status(request_id, "failed" if failed else "completed")
+    await set_status(database, request_id, "failed" if failed else "completed")
     from factory_pipeline.registry import record_outcome
 
     await record_outcome(database, state)

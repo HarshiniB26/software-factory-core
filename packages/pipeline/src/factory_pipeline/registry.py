@@ -90,9 +90,7 @@ def parse_decision(text: str) -> tuple[str, str] | None:
     return None
 
 
-def fallback_decision(
-    best: AgentSpec | None, similarity: float
-) -> tuple[str, str]:
+def fallback_decision(best: AgentSpec | None, similarity: float) -> tuple[str, str]:
     if best is None or similarity <= 0:
         return "CREATE", "No stored agent is close to this role and these capabilities."
     scores = best.evals
@@ -185,7 +183,9 @@ def _spec(
     )
 
 
-async def _maybe_activate(database: Any, ports: dict[str, Any], spec: AgentSpec, parent: AgentSpec | None) -> AgentSpec:
+async def _maybe_activate(
+    database: Any, ports: dict[str, Any], spec: AgentSpec, parent: AgentSpec | None
+) -> AgentSpec:
     runner = ports.get("eval")
     if runner is None:
         return spec
@@ -200,11 +200,15 @@ async def _maybe_activate(database: Any, ports: dict[str, Any], spec: AgentSpec,
             )
         }
     )
-    baseline = {
-        "n": parent.evals.n or 0,
-        "pass_rate": parent.evals.pass_rate or 0,
-        "cost_per_task_usd": parent.evals.cost_per_task_usd or 0,
-    } if parent is not None else {"n": 0, "pass_rate": 0, "cost_per_task_usd": 0}
+    baseline = (
+        {
+            "n": parent.evals.n or 0,
+            "pass_rate": parent.evals.pass_rate or 0,
+            "cost_per_task_usd": parent.evals.cost_per_task_usd or 0,
+        }
+        if parent is not None
+        else {"n": 0, "pass_rate": 0, "cost_per_task_usd": 0}
+    )
     candidate = {
         "n": scores.n,
         "pass_rate": scores.pass_rate,

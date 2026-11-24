@@ -1,7 +1,9 @@
 """HTTP API. Creating a request starts NoOpRequestWorkflow and streams its events."""
 
 import asyncio
-from collections.abc import AsyncGenerator, AsyncIterator
+import os
+import re
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import cast
 from uuid import UUID
@@ -30,20 +32,23 @@ from factory_core import (
 )
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sse_starlette.sse import EventSourceResponse
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.responses import Response
 
-from factory_api.console_api import default_target
+from factory_api.console_api import connected_key, default_target, principal, visible_requests
 from factory_api.console_api import router as console_router
 from factory_api.oauth import router as oauth_router
+from factory_api.operations import router as operations_router
 
 
 class ApiSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="FACTORY_", extra="ignore")
 
-    api_host: str = "0.0.0.0"
+    api_host: str = "127.0.0.1"
     api_port: int = 43123
 
 
@@ -98,6 +103,8 @@ async def create_request(body: RequestCreate, request: Request) -> FactoryReques
     database: Database = request.app.state.database
     orchestrator: Orchestrator = request.app.state.orchestrator
     settings = Settings()
+    actor = principal(request)
+    body = body.model_copy(update={"requester": actor.id})
     stored = await database.get_state("console.settings") or {}
     overrides = dict(body.overrides or {})
     flags = dict(overrides.get("flags") or {})
@@ -120,13 +127,25 @@ async def create_request(body: RequestCreate, request: Request) -> FactoryReques
     except (PolicyError, LoaderError, ValidationError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     if not body.target:
-        chosen = await default_target(database)
+        chosen = await default_target(database, actor.id)
         if chosen:
             body = body.model_copy(update={"target": chosen})
+    if os.environ.get("FACTORY_AUTH_MODE", "dev") != "dev":
+        connected = await database.get_state(connected_key(actor.id)) or {}
+        if connected.get("kind") != "github" or connected.get("full_name") != body.target:
+            raise HTTPException(status_code=403, detail="Select a granted GitHub repository first")
     created = await database.create_request(body)
     from factory_pipeline.service import blank_state
 
     initial = blank_state()
+    initial["connected_repo"] = await database.get_state(connected_key(actor.id)) or {}
+    initial["project_type"] = body.project_type
+    initial["delivery_target"] = (
+        "verified"
+        if settings.execution_mode == "live" and initial["connected_repo"].get("kind") == "local"
+        else body.delivery_target
+    )
+    initial["execution_mode"] = settings.execution_mode
     if body.overrides:
         initial["overrides"] = body.overrides
         initial["overrides_applied"] = True
@@ -171,7 +190,7 @@ async def create_request(body: RequestCreate, request: Request) -> FactoryReques
 @router.get("/requests", response_model=list[FactoryRequest])
 async def list_requests(request: Request) -> list[FactoryRequest]:
     database: Database = request.app.state.database
-    return await database.list_requests()
+    return await visible_requests(database, principal(request))
 
 
 @router.get("/requests/{request_id}", response_model=FactoryRequest)
@@ -215,6 +234,34 @@ def create_app(
     app = FastAPI(title="Software Factory", version="0.1.0", lifespan=lifespan)
     app.state.database = database
     app.state.orchestrator = orchestrator
+
+    @app.middleware("http")
+    async def authorize(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        if os.environ.get("FACTORY_AUTH_MODE", "dev") != "dev":
+            path = request.url.path
+            public = {"/health", "/auth/github/login", "/auth/github/callback", "/auth/dev-login"}
+            if path not in public:
+                try:
+                    actor = principal(request)
+                    match = re.match(r"^/requests/([0-9a-fA-F-]{36})(?:/|$)", path)
+                    if match:
+                        row = await request.app.state.database.get_request(UUID(match.group(1)))
+                        if row is None or (
+                            row.requester != actor.id
+                            and not {"admin", "approver"} & set(actor.roles)
+                        ):
+                            return JSONResponse({"detail": "request not found"}, status_code=404)
+                    if (
+                        path.startswith(("/admin", "/learning", "/monitor"))
+                        and "admin" not in actor.roles
+                    ):
+                        return JSONResponse({"detail": "admin role required"}, status_code=403)
+                except HTTPException as exc:
+                    return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+        return await call_next(request)
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://127.0.0.1:43124", "http://localhost:43124"],
@@ -226,6 +273,7 @@ def create_app(
     app.include_router(router)
     app.include_router(console_router)
     app.include_router(oauth_router)
+    app.include_router(operations_router)
     return app
 
 

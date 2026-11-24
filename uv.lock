@@ -994,6 +994,7 @@ version = "0.1.0"
 source = { editable = "modules/harnesses" }
 dependencies = [
     { name = "factory-contracts" },
+    { name = "httpx" },
 ]
 
 [package.optional-dependencies]
@@ -1008,6 +1009,7 @@ codex = [
 requires-dist = [
     { name = "claude-agent-sdk", marker = "extra == 'claude'" },
     { name = "factory-contracts", editable = "packages/contracts" },
+    { name = "httpx", specifier = ">=0.28" },
     { name = "openai-codex", marker = "extra == 'codex'" },
 ]
 provides-extras = ["claude", "codex"]
@@ -1078,12 +1080,14 @@ source = { editable = "packages/pipeline" }
 dependencies = [
     { name = "factory-contracts" },
     { name = "factory-core" },
+    { name = "httpx" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "factory-contracts", editable = "packages/contracts" },
     { name = "factory-core", editable = "packages/core" },
+    { name = "httpx", specifier = ">=0.28" },
 ]
 
 [[package]]

@@ -3,6 +3,7 @@
 from datetime import timedelta
 
 from temporalio import workflow
+from temporalio.common import RetryPolicy
 
 # Name matches factory_contracts.NOOP_WORKFLOW. Kept as a literal so this module
 # does not import Pydantic into the Temporal sandbox.
@@ -35,10 +36,16 @@ class FactoryRequestWorkflow:
             result = await workflow.execute_activity(
                 "pipeline_tick",
                 hint,
-                start_to_close_timeout=timedelta(minutes=5),
+                start_to_close_timeout=timedelta(minutes=15),
+                heartbeat_timeout=timedelta(seconds=45),
+                retry_policy=RetryPolicy(maximum_attempts=3),
             )
             status = str(result.get("status", ""))
             self._status = status
+            if status == "running":
+                hint = {"request_id": request_id}
+                await workflow.sleep(timedelta(seconds=1))
+                continue
             if status == "parked":
                 try:
                     await workflow.wait_condition(
@@ -69,8 +76,8 @@ class FactoryRequestWorkflow:
             request_id,
             start_to_close_timeout=timedelta(seconds=30),
         )
-        self._status = "completed"
-        return "completed"
+        self._status = status if status in {"completed", "failed", "killed"} else "failed"
+        return self._status
 
     @workflow.signal(name="answer")
     async def answer(self, payload: dict[str, str]) -> None:

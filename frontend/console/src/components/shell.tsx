@@ -132,6 +132,16 @@ export function Shell() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  useEffect(() => {
+    if (!principal) return;
+    let active = true;
+    const timer = window.setInterval(() => {
+      if (document.hidden) return;
+      void api.requests().then((items) => { if (active) setRuns([...items].sort((left, right) => right.created_at.localeCompare(left.created_at))); }).catch(() => {});
+    }, 5000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [principal?.id]);
+
   const session = useMemo<Session>(
     () => ({
       principal,
@@ -165,11 +175,16 @@ export function Shell() {
           />
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-14 items-center gap-2 border-b border-[var(--line)] px-3 md:hidden">
-            <Button variant="ghost" size="icon" aria-label="Open menu" onClick={() => setMenu(true)}>
+          <header className="flex h-14 items-center justify-between border-b border-[var(--line)] bg-[var(--card)] px-6">
+            <Button className="md:hidden" variant="ghost" size="icon" aria-label="Open menu" onClick={() => setMenu(true)}>
               <Menu className="h-4 w-4" />
             </Button>
-            <span className="text-sm font-semibold">Factory</span>
+            <span className="text-sm font-semibold md:hidden">Software Factory</span>
+            <div className="hidden md:block">
+              <p className="text-sm font-medium">Workspace</p>
+              <p className="text-xs text-zinc-500">{connected?.full_name ?? "No repository selected"}</p>
+            </div>
+            <p className="hidden text-xs text-zinc-500 md:block">{principal?.id ?? "signed out"}</p>
           </header>
           <main className="min-h-0 flex-1 overflow-auto">
             <Outlet />
@@ -234,14 +249,11 @@ function Sidebar({
 }) {
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 px-3 py-4">
-        <span className="relative grid h-8 w-8 place-items-center">
-          <span className="absolute h-7 w-7 rounded-full bg-[var(--accent)] opacity-90" />
-          <span className="absolute h-5 w-5 translate-x-1 rounded-full bg-[var(--accent-2)] opacity-90" />
-        </span>
-        <div>
-          <p className="wordmark text-sm font-semibold leading-none tracking-tight">Factory</p>
-          <p className="mt-1 text-xs text-zinc-500">{principal?.id ?? "signed out"}</p>
+      <div className="flex items-center gap-2.5 px-3 py-4">
+        <span className="grid h-8 w-8 place-items-center rounded-md bg-[#1f3a5f] text-xs font-semibold text-white">SF</span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold leading-none tracking-tight">Software Factory</p>
+          <p className="mt-1 truncate text-xs text-zinc-500">{principal?.id ?? "signed out"}</p>
         </div>
       </div>
       <button
@@ -251,7 +263,8 @@ function Sidebar({
         <FolderGit2 className="h-4 w-4 text-zinc-500" />
         <span className="min-w-0 truncate">{connected ? connected.full_name : "Connect a repository"}</span>
       </button>
-      <nav className="mt-3 space-y-0.5 px-2">
+      <p className="mt-4 px-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Workspace</p>
+      <nav className="mt-2 space-y-0.5 px-2">
         <Item to="/" label="New issue" icon={<Plus className="h-4 w-4" />} end onNavigate={onNavigate} />
         <Item to="/board" label="Board" icon={<ScrollText className="h-4 w-4" />} onNavigate={onNavigate} />
         <Item to="/inbox" label="Inbox" icon={<Inbox className="h-4 w-4" />} onNavigate={onNavigate} />
@@ -259,6 +272,7 @@ function Sidebar({
         <Item to="/registry" label="Registry" icon={<Library className="h-4 w-4" />} onNavigate={onNavigate} />
         <Item to="/repos" label="Repositories" icon={<FolderGit2 className="h-4 w-4" />} onNavigate={onNavigate} />
         <Item to="/cost" label="Usage" icon={<CircleDollarSign className="h-4 w-4" />} onNavigate={onNavigate} />
+        {principal?.roles.includes("admin") && <Item to="/operations" label="Operations" icon={<ScrollText className="h-4 w-4" />} onNavigate={onNavigate} />}
         <Item to="/settings" label="Settings" icon={<Settings className="h-4 w-4" />} onNavigate={onNavigate} />
       </nav>
       <div className="mt-4 min-h-0 flex-1 overflow-auto px-2">

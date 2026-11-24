@@ -25,7 +25,6 @@ export function RunsPage() {
       }),
     [runs, filter, query],
   );
-  const spent = runs.filter((run) => run.status === "completed").length * 0.032;
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
@@ -34,7 +33,7 @@ export function RunsPage() {
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <Stat label="Open and finished" value={String(runs.length)} />
         <Stat label="Success rate" value={report ? `${Math.round(report.success_rate * 100)}%` : "—"} />
-        <Stat label="Fixture spend" value={report ? money(report.estimated_usd) : money(spent)} />
+        <Stat label="Provider spend" value={report ? money(report.estimated_usd) : "Unavailable"} />
       </div>
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         <Chart title="Runs over time">

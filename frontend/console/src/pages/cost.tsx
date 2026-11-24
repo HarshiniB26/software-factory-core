@@ -13,7 +13,7 @@ export function CostPage() {
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
       <h1 className="wordmark text-2xl font-semibold tracking-tight">Usage</h1>
-      <p className="mt-1 text-sm text-zinc-500">Spend, outcomes, and how long a run takes. Fixture prices until a live key is set.</p>
+      <p className="mt-1 text-sm text-zinc-500">Recorded outcomes and execution duration. Live provider billing is not available.</p>
       {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
       {!report ? <div className="mt-6 h-48 animate-pulse rounded-2xl bg-white/50" /> : null}
       {report ? (
@@ -38,7 +38,7 @@ export function CostPage() {
               </BarChart>
             </ResponsiveContainer>
           </Chart>
-          <Chart title="Cost per day">
+          {report.usage_available !== false && <Chart title="Cost per day">
             <ResponsiveContainer width="100%" height={200}>
               <AreaChart data={report.series}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(127,127,127,0.25)" />
@@ -48,7 +48,7 @@ export function CostPage() {
                 <Area dataKey="usd" stroke="#0c6e62" fill="#0c6e62" fillOpacity={0.25} name="USD" />
               </AreaChart>
             </ResponsiveContainer>
-          </Chart>
+          </Chart>}
           <div className="grid gap-3 lg:grid-cols-2">
             <Chart title="Success rate">
               <ResponsiveContainer width="100%" height={200}>

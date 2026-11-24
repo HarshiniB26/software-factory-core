@@ -1,6 +1,12 @@
 from factory_contracts import AgentModels, AgentSpec, AgentTools
-
-from factory_pipeline.registry import agent_profile, cosine, embed, fallback_decision, parse_decision, step_need
+from factory_pipeline.registry import (
+    agent_profile,
+    cosine,
+    embed,
+    fallback_decision,
+    parse_decision,
+    step_need,
+)
 
 
 def test_embed_is_stable_and_similar_for_the_same_need() -> None:
@@ -20,7 +26,15 @@ def test_judge_json_is_accepted_only_when_the_reason_is_present() -> None:
 
 
 def test_profile_match_prefers_the_agent_whose_skills_fit_the_step() -> None:
-    need = embed(step_need({"role": "implementer", "goal": "add tests for the health handler", "capabilities": ["add or update tests"]}))
+    need = embed(
+        step_need(
+            {
+                "role": "implementer",
+                "goal": "add tests for the health handler",
+                "capabilities": ["add or update tests"],
+            }
+        )
+    )
     tester = AgentSpec(
         id="agent.implementer",
         version="0.1.0",

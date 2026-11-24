@@ -7,7 +7,7 @@ state are current records and may change. Blobs live on the local disk.
 
 import asyncio
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 from uuid import UUID, uuid4
@@ -31,11 +31,15 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    delete,
     event,
     func,
     select,
+    update,
 )
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -230,6 +234,12 @@ class Database:
 
     async def append(self, event: EventDraft) -> FactoryEvent:
         async with self._append_lock, self._sessions() as session, session.begin():
+            # Serialize event numbering across independent worker/monitor processes.
+            await session.execute(
+                update(RequestRow)
+                .where(RequestRow.id == event.request_id)
+                .values(status=RequestRow.status)
+            )
             current = await session.scalar(
                 select(func.max(EventRow.seq)).where(EventRow.request_id == event.request_id)
             )
@@ -275,6 +285,130 @@ class Database:
             for item in events:
                 seq = item.seq
                 yield item
+
+    async def acquire_lease(self, key: str, owner: str, ttl: int = 60) -> bool:
+        """Atomic across workers; an expired owner cannot renew a replacement's lease."""
+        now = utcnow()
+        insert = pg_insert if self.engine.dialect.name == "postgresql" else sqlite_insert
+        statement = insert(StateRow).values(key=key, value={"owner": owner}, updated_at=now)
+        statement = statement.on_conflict_do_update(
+            index_elements=[StateRow.key],
+            set_={"value": {"owner": owner}, "updated_at": now},
+            where=StateRow.updated_at < now - timedelta(seconds=ttl),
+        ).returning(StateRow.key)
+        async with self._sessions() as session, session.begin():
+            return (await session.scalar(statement)) is not None
+
+    async def renew_lease(self, key: str, owner: str, ttl: int = 60) -> bool:
+        now = utcnow()
+        statement = (
+            update(StateRow)
+            .where(
+                StateRow.key == key,
+                StateRow.value["owner"].as_string() == owner,
+                StateRow.updated_at >= now - timedelta(seconds=ttl),
+            )
+            .values(updated_at=now)
+            .returning(StateRow.key)
+        )
+        async with self._sessions() as session, session.begin():
+            return (await session.scalar(statement)) is not None
+
+    async def release_lease(self, key: str, owner: str) -> None:
+        async with self._sessions() as session, session.begin():
+            await session.execute(
+                delete(StateRow).where(
+                    StateRow.key == key,
+                    StateRow.value["owner"].as_string() == owner,
+                )
+            )
+
+    async def fenced_update_status(
+        self,
+        request_id: UUID,
+        status: RequestStatus,
+        lease: str,
+        owner: str,
+    ) -> None:
+        now = utcnow()
+        async with self._sessions() as session, session.begin():
+            held = await session.scalar(
+                update(StateRow)
+                .where(
+                    StateRow.key == lease,
+                    StateRow.value["owner"].as_string() == owner,
+                    StateRow.updated_at >= now - timedelta(seconds=60),
+                )
+                .values(updated_at=now)
+                .returning(StateRow.key)
+            )
+            if held is None:
+                raise ContractError("Run lease was lost; refusing stale status update")
+            await session.execute(
+                update(RequestRow).where(RequestRow.id == request_id).values(status=status)
+            )
+
+    async def put_fenced_state(
+        self,
+        key: str,
+        value: dict[str, Any],
+        lease: str,
+        owner: str,
+    ) -> None:
+        now = utcnow()
+        async with self._sessions() as session, session.begin():
+            held = await session.scalar(
+                update(StateRow)
+                .where(
+                    StateRow.key == lease,
+                    StateRow.value["owner"].as_string() == owner,
+                    StateRow.updated_at >= now - timedelta(seconds=60),
+                )
+                .values(updated_at=now)
+                .returning(StateRow.key)
+            )
+            if held is None:
+                raise ContractError("Run lease was lost; refusing stale state write")
+            row = await session.get(StateRow, key)
+            if row is None:
+                session.add(StateRow(key=key, value=dict(value), updated_at=now))
+            else:
+                row.value, row.updated_at = dict(value), now
+
+    async def insert_state(self, key: str, value: dict[str, Any]) -> bool:
+        insert = pg_insert if self.engine.dialect.name == "postgresql" else sqlite_insert
+        statement = insert(StateRow).values(key=key, value=value, updated_at=utcnow())
+        statement = statement.on_conflict_do_nothing(index_elements=[StateRow.key]).returning(
+            StateRow.key
+        )
+        async with self._sessions() as session, session.begin():
+            return (await session.scalar(statement)) is not None
+
+    async def compare_state(
+        self, key: str, expected: dict[str, Any] | None, value: dict[str, Any]
+    ) -> bool:
+        if expected is None:
+            return await self.insert_state(key, value)
+        async with self._sessions() as session, session.begin():
+            changed = await session.scalar(
+                update(StateRow)
+                .where(
+                    StateRow.key == key,
+                    StateRow.value == expected,
+                )
+                .values(value=value, updated_at=utcnow())
+                .returning(StateRow.key)
+            )
+            return changed is not None
+
+    async def list_states(self, prefix: str) -> list[dict[str, Any]]:
+        async with self._sessions() as session:
+            rows = await session.scalars(
+                select(StateRow)
+                .where(StateRow.key.startswith(prefix, autoescape=True))
+                .order_by(StateRow.updated_at.desc())
+            )
+            return [dict(row.value) for row in rows]
 
     async def put_state(self, key: str, value: dict[str, Any]) -> None:
         async with self._sessions() as session, session.begin():

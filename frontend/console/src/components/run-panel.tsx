@@ -1,3 +1,4 @@
+import { LiveRunPanel } from "@/components/live-run-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
@@ -12,6 +13,7 @@ import { useRef } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
+
 
 const TERMINAL = new Set(["completed", "failed", "killed", "parked", "awaiting_approval"]);
 
@@ -33,7 +35,7 @@ export function RunPanel({ id, showTitle = false }: { id: string; showTitle?: bo
         setView(next);
         setError(null);
         setFile((current) => current || next.files.find((item) => item.status === "modified")?.path || next.files[0]?.path || "");
-        if (!TERMINAL.has(next.request.status)) window.setTimeout(poll, 500);
+        if (!new Set(["completed", "failed", "killed"]).has(next.request.status)) window.setTimeout(poll, 1500);
       } catch (err) {
         if (!stop) setError(err instanceof Error ? err.message : "Could not load this run");
       }
@@ -70,6 +72,8 @@ export function RunPanel({ id, showTitle = false }: { id: string; showTitle?: bo
       </div>
     );
   }
+
+  if (view.execution_mode === "live") return <LiveRunPanel view={view} id={id} showTitle={showTitle} />;
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">

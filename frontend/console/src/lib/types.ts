@@ -97,7 +97,24 @@ export type RunView = {
   messages: ThreadMessage[];
   events: RunEvent[];
   diff: string;
-  diff_kind: "fixture" | "git";
+  diff_kind: "fixture" | "git" | "unavailable";
+  execution_mode?: "live" | "demo";
+  project_type?: "greenfield" | "brownfield" | "modernization";
+  provider?: string | null;
+  model?: string | null;
+  failure?: string | null;
+  thread_id?: string | null;
+  active_seconds?: number;
+  usage_available?: boolean;
+  verified_sha?: string | null;
+  pending_operation?: string | null;
+  approval_reason?: string | null;
+  approval_next?: string | null;
+  ci?: { status: string; sha: string; failed: string[] } | null;
+  learning_proposal?: string | null;
+  verification?: { argv: string[]; exit_code: number; output_sha256: string }[];
+  baseline?: { argv: string[]; status: string; detail?: string }[];
+  plan_details?: { base_initialization?: { branch: string; sha: string }; summary: string; acceptance_criteria: string[]; verification: string[][]; preserve: string[]; migration_steps: string[]; rollback: string[] } | null;
   gates: GateReport[];
   agent: { id?: string; version?: string; status?: string } | null;
   prs: Pull[];
@@ -145,7 +162,8 @@ export type CostPoint = {
 
 export type CostReport = {
   pull_requests: number;
-  estimated_usd: number;
+  estimated_usd: number | null;
+  usage_available?: boolean;
   series: CostPoint[];
   success_rate: number;
   average_duration_seconds: number;
@@ -159,12 +177,12 @@ export type BoardCard = {
   stage: string;
   target: string | null;
   created_at: string;
-  cost_usd: number;
+  cost_usd: number | null;
   duration_seconds: number;
   model: string | null;
 };
 
-export type InboxItem = RequestRow & { question?: string; kind?: string };
+export type InboxItem = RequestRow & { question?: string; kind?: string; execution_mode?: "live" | "demo" };
 
 export class ApiError extends Error {
   status: number;
@@ -174,3 +192,24 @@ export class ApiError extends Error {
     this.status = status;
   }
 }
+
+export type RuntimeInfo = {
+  execution_mode: "live" | "demo";
+  provider: string | null;
+  model: string | null;
+  ready: boolean;
+  usage_available: boolean;
+  execution_isolation: string;
+  approval: string;
+  providers: { id: string; name: string; driver: string; enabled: boolean; models: string[] }[];
+};
+export type MonitorAlert = { request_id: string; reason: string; stage: string; thread_id: string | null; first_seen: number; requires_action: boolean };
+export type MonitorInfo = { healthy: boolean; health: { at: number; alerts: number } | null; alerts: MonitorAlert[] };
+export type LearningCandidate = { id: string; profile: string; reason: string; instructions: string; evidence: string[]; request_id: string; hash: string };
+export type LearningInfo = {
+  outcomes: { request_id: string; profile: string; outcome: string; repairs: number }[];
+  candidates: LearningCandidate[];
+  evaluations: { id: string; candidate_id: string; results: { case: string; variant: string; verdict: string }[] }[];
+  active: { candidate_id: string | null; approved_by: string; previous?: string }[];
+  jobs: { id: string; status: string; candidate_id: string; error?: string }[];
+};

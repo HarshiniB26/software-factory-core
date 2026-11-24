@@ -17,8 +17,9 @@ const COLUMNS = [
 
 export function BoardPage() {
   const [items, setItems] = useState<BoardCard[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    const load = () => api.board().then((payload) => setItems(payload.items)).catch(() => setItems([]));
+    const load = () => api.board().then((payload) => { setItems(payload.items); setError(null); }).catch((err: unknown) => setError(err instanceof Error ? err.message : "Board unavailable"));
     void load();
     const timer = window.setInterval(load, 4000);
     return () => window.clearInterval(timer);
@@ -27,7 +28,8 @@ export function BoardPage() {
     <div className="px-6 py-8">
       <h1 className="wordmark text-2xl font-semibold tracking-tight">Board</h1>
       <p className="mt-1 text-sm text-zinc-500">Jobs move from the queue to an open pull request. Nothing here merges.</p>
-      {items === null ? <div className="mt-6 h-64 animate-pulse rounded-2xl bg-white/50 dark:bg-white/5" /> : null}
+      {error && <p role="alert" className="mt-4 text-sm text-red-600">{error}</p>}
+      {items === null && !error ? <div className="mt-6 h-64 animate-pulse rounded-2xl bg-white/50 dark:bg-white/5" /> : null}
       {items ? (
         <div className="mt-6 flex gap-3 overflow-auto pb-4">
           {COLUMNS.map(([id, label]) => {

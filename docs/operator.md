@@ -1,5 +1,7 @@
 # Operator guide
 
+For live requests use [the live runtime guide](live-runtime.md). The legacy registry, role fan-out, clarification flags and dollar-budget descriptions below apply to the explicit demo/module pipeline, not the new single-session live runtime.
+
 ## Daily loop
 
 The worker polls Temporal. The API accepts chat requests and signals the workflow when a person answers or approves. Watch `GET /audit` or the console Audit page. Every module call is an append-only event with `module@version`.

@@ -28,6 +28,13 @@ def start() -> None:
     logs = root / ".factory"
     processes = [
         subprocess.Popen(
+            ["uv", "run", "factory-monitor"],
+            cwd=root,
+            env=env,
+            stdout=(logs / "monitor.log").open("ab"),
+            stderr=subprocess.STDOUT,
+        ),
+        subprocess.Popen(
             ["uv", "run", "factory-worker"],
             cwd=root,
             env=env,

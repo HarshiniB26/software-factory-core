@@ -2,7 +2,15 @@
 
 An autonomous software factory. A small Python core records what happened, resolves config, and calls modules through stable interfaces. Modules own every vendor. You describe the change in the console. The pipeline clarifies, plans, runs the steps, and opens a pull request. It does not merge.
 
-The default configuration uses in-process fakes, so the whole path runs with no GitHub App and no model keys. Real modules turn on when their environment variables are set. See `.env.example`, `docs/setup.md`, `docs/operator.md`, and `docs/modules.md`.
+The default execution mode is live and requires configured T3 and GitHub integrations. The explicit demo mode runs without GitHub or model credentials. See `.env.example`, `docs/setup.md`, `docs/operator.md`, and `docs/modules.md`.
+
+## Current live runtime
+
+Live mode now uses one persistent T3 coding session per request: clone the selected branch, inspect the repository, clarify when necessary, infer the approach, plan, implement, review, verify the resulting commit and publish a real GitHub PR. High-risk changes require approval. Missing integrations fail closed. Skills are fetched from integrity-checked pins and supplied to the session with audit receipts. See [live runtime setup and qualification limits](docs/live-runtime.md).
+
+The console is chat-first: there is no workflow-category selector. Settings discovers T3 provider/models. Operations exposes independent monitoring, safe recovery and measured improvement candidates. Retrospective suggestions must beat paired held-out evaluation before administrator-approved activation. Real local T3 qualification is recorded in [docs/qualification.md](docs/qualification.md); production isolation, billing enforcement and deployment integration remain explicit rollout boundaries.
+
+Set `FACTORY_EXECUTION_MODE=demo` explicitly to exercise the legacy simulated module pipeline described below. Its fake results are not evidence of live execution. The historical Week 1 sections below describe the initial scaffold; the live-runtime guide is authoritative for the new path.
 
 ## Architecture
 

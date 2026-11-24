@@ -35,3 +35,6 @@ test-results/
 playwright-report/
 frontend/console/blob-report/
 .DS_Store
+
+# Live agent workspaces may contain private source.
+.factory/live/
