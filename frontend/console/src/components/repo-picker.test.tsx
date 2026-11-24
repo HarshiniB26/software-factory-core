@@ -1,6 +1,6 @@
 import { RepoPicker } from "@/components/repo-picker";
 import { GITHUB_OAUTH_NOTE } from "@/lib/repo-picker";
-import type { Repo } from "@/lib/types";
+import type { GitHubAccount, Repo } from "@/lib/types";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { MemoryRouter } from "react-router-dom";
@@ -17,15 +17,30 @@ const sample: Repo = {
   kind: "local",
 };
 
-function Harness({ oauth = false }: { oauth?: boolean }) {
+const billing: Repo = {
+  owner: "acme",
+  name: "billing",
+  full_name: "acme/billing",
+  description: "Checkout",
+  path: null,
+  kind: "github",
+  private: true,
+  default_branch: "main",
+};
+
+const ada: GitHubAccount = { login: "ada", avatar_url: "", installed: true };
+
+function Harness({ oauth = false, signedIn = false }: { oauth?: boolean; signedIn?: boolean }) {
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState<Repo | null>(null);
   return (
     <MemoryRouter>
       <RepoPicker
-        repos={[sample]}
+        repos={signedIn ? [sample, billing] : [sample]}
         connected={current}
         oauth={oauth}
+        github={signedIn ? ada : null}
+        installUrl={signedIn ? "https://github.com/apps/factory/installations/new" : null}
         open={open}
         onOpenChange={setOpen}
         onSelect={(fullName) => setCurrent(fullName === sample.full_name ? sample : null)}
@@ -56,6 +71,19 @@ describe("RepoPicker", () => {
     fireEvent.click(screen.getByRole("button", { name: "Choose repository" }));
     expect(screen.getByRole("link", { name: "Connect GitHub" }).getAttribute("href")).toBe("/api/auth/github/login");
     expect(screen.queryByText(GITHUB_OAUTH_NOTE, { exact: false })).toBeNull();
+  });
+
+  it("shows Local and GitHub sections for a signed-in account", () => {
+    render(<Harness signedIn />);
+    fireEvent.click(screen.getByRole("button", { name: "Choose repository" }));
+    expect(screen.getByText("ada")).toBeTruthy();
+    expect(screen.getByText("Local")).toBeTruthy();
+    expect(screen.getByText("GitHub")).toBeTruthy();
+    expect(screen.getByRole("option", { name: /acme\/billing/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Add repositories" }).getAttribute("href")).toBe(
+      "https://github.com/apps/factory/installations/new",
+    );
+    expect(screen.getByRole("link", { name: "Switch account" }).getAttribute("href")).toBe("/api/auth/github/login");
   });
 
   it("keeps the popover open when Connect GitHub has no OAuth app", () => {

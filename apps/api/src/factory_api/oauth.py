@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
 from factory_api.access import roles_for
+from factory_api.github_account import http_client, remember
 
 router = APIRouter()
 
@@ -24,7 +25,7 @@ def _oauth() -> OAuth:
         access_token_url="https://github.com/login/oauth/access_token",
         authorize_url="https://github.com/login/oauth/authorize",
         api_base_url="https://api.github.com/",
-        client_kwargs={"scope": "read:user user:email"},
+        client_kwargs={"scope": "read:user"},
     )
     return oauth
 
@@ -49,8 +50,24 @@ async def github_callback(request: Request) -> RedirectResponse:
     response = await _oauth().github.get("user", token=token)
     profile = response.json()
     login = str(profile.get("login") or profile.get("id"))
+    access = str(token.get("access_token") or "")
+    if not access:
+        raise HTTPException(status_code=502, detail="GitHub did not return a token")
     roles = roles_for(login)
     database: Database = request.app.state.database
+    client = getattr(request.app.state, "github_http", None) or http_client()
+    owned = client is not getattr(request.app.state, "github_http", None)
+    try:
+        await remember(
+            database,
+            login,
+            access,
+            client=client,
+            profile={"login": login, "avatar_url": str(profile.get("avatar_url") or "")},
+        )
+    finally:
+        if owned:
+            await client.aclose()
     await database.upsert_user(login, roles)
     issued = issue_token(Principal(id=login, roles=roles))  # type: ignore[arg-type]
     console = os.environ.get("FACTORY_CONSOLE_URL", "http://127.0.0.1:43124")

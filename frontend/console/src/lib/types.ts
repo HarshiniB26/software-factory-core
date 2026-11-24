@@ -7,6 +7,24 @@ export type Repo = {
   description: string;
   path: string | null;
   kind: "local" | "fixture" | "github";
+  private?: boolean;
+  default_branch?: string | null;
+  branch?: string | null;
+};
+
+export type GitHubAccount = {
+  login: string;
+  avatar_url: string;
+  installed: boolean;
+};
+
+export type RepoList = {
+  repos: Repo[];
+  connected: Repo | null;
+  mode: string;
+  oauth: boolean;
+  github: GitHubAccount | null;
+  install_url: string | null;
 };
 
 export type RequestRow = {

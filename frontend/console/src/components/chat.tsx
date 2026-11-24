@@ -8,7 +8,7 @@ import {
   useLocalRuntime,
   type ChatModelAdapter,
 } from "@assistant-ui/react";
-import { RepoPicker } from "@/components/repo-picker";
+import { BranchChip, RepoPicker } from "@/components/repo-picker";
 import { RunPanel } from "@/components/run-panel";
 import { useSession } from "@/components/shell";
 import { Button } from "@/components/ui/button";
@@ -92,6 +92,15 @@ function ComposerBar() {
 
   return (
     <div className="px-4 pb-4">
+      {session.oauth && !session.github ? (
+        <div className="mx-auto mb-2 flex w-full max-w-3xl items-center justify-between gap-3 rounded-xl border border-[var(--line)] px-3 py-2">
+          <p className="text-sm">Connect GitHub to use repositories you grant to the app.</p>
+          <a href="/api/auth/github/login" className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-white">
+            <Github className="h-3.5 w-3.5" aria-hidden="true" />
+            Connect GitHub
+          </a>
+        </div>
+      ) : null}
       {session.oauth ? null : (
         <div className="mx-auto mb-2 flex w-full max-w-3xl items-center justify-between gap-3 rounded-xl border border-[var(--line)] bg-[color-mix(in_srgb,var(--accent-2)_12%,transparent)] px-3 py-2">
           <p className="text-sm">GitHub isn't connected. The local sample still runs.</p>
@@ -120,13 +129,24 @@ function ComposerBar() {
             repos={session.repos}
             connected={selected}
             oauth={session.oauth}
+            github={session.github}
+            installUrl={session.installUrl}
             open={open}
             onOpenChange={setOpen}
+            onRefresh={() => void session.refreshGithub()}
+            onDisconnect={() => void session.disconnectGithub()}
             onSelect={(fullName) => {
               setHint(false);
               void session.connect(fullName);
             }}
           />
+          {selected?.kind === "github" ? (
+            <BranchChip
+              name={selected.branch || selected.default_branch || "main"}
+              load={() => api.branches(selected.full_name)}
+              onSelect={(branch) => void session.connect(selected.full_name, branch)}
+            />
+          ) : null}
           {ready ? (
             <ComposerPrimitive.Send asChild>
               <Button size="icon" aria-label="Send">

@@ -6,6 +6,7 @@ import {
   type CostReport,
   type Principal,
   type Repo,
+  type RepoList,
   type RequestRow,
   type RunView,
   type BoardCard,
@@ -32,6 +33,23 @@ async function unwrap<T>(pending: Promise<{ data?: unknown; error?: unknown; res
   throw new ApiError(result.response.status, detail);
 }
 
+async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const headers = authHeaders();
+  if (init.body) headers.set("content-type", "application/json");
+  const response = await fetch(`/api${path}`, { ...init, headers });
+  if (!response.ok) {
+    let detail = response.statusText;
+    try {
+      const payload = (await response.json()) as { detail?: unknown };
+      if (payload.detail) detail = String(payload.detail);
+    } catch {
+      detail = response.statusText;
+    }
+    throw new ApiError(response.status, detail);
+  }
+  return (await response.json()) as T;
+}
+
 export const api = {
   me: () => unwrap<Principal>(raw.GET("/auth/me", { headers: authHeaders() })),
   login: async (user: string, role: string) => {
@@ -44,16 +62,23 @@ export const api = {
     localStorage.setItem("factory_token", session.token);
     return session;
   },
-  repos: () =>
-    unwrap<{ repos: Repo[]; connected: Repo | null; mode: string; oauth: boolean }>(
-      raw.GET("/repos", { headers: authHeaders() }),
-    ),
-  connect: (fullName: string) =>
-    unwrap<Repo>(
-      raw.POST("/repos/connect", {
-        body: { full_name: fullName },
-        headers: authHeaders(),
-      }),
+  repos: () => unwrap<RepoList>(raw.GET("/repos", { headers: authHeaders() })),
+  connect: (fullName: string, branch?: string) =>
+    requestJson<Repo>("/repos/connect", {
+      method: "POST",
+      body: JSON.stringify({ full_name: fullName, branch }),
+    }),
+  disconnectRepo: (fullName: string) =>
+    requestJson<{ disconnected: string }>("/repos/disconnect", {
+      method: "POST",
+      body: JSON.stringify({ full_name: fullName }),
+    }),
+  refreshGithub: () => requestJson<RepoList>("/repos/github/refresh"),
+  disconnectGithub: () =>
+    requestJson<{ disconnected: boolean }>("/auth/github/disconnect", { method: "POST" }),
+  branches: (fullName: string) =>
+    requestJson<{ branches: string[]; default: string | null }>(
+      `/repos/branches?full_name=${encodeURIComponent(fullName)}`,
     ),
   createRequest: (title: string, body: string, target: string | null) =>
     unwrap<RequestRow>(

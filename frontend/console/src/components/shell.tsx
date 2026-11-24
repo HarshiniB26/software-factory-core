@@ -3,7 +3,7 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { formatWhen } from "@/lib/format";
 import { useTheme } from "@/lib/theme";
-import type { Principal, Repo, RequestRow } from "@/lib/types";
+import type { GitHubAccount, Principal, Repo, RequestRow } from "@/lib/types";
 import {
   CircleDollarSign,
   FolderGit2,
@@ -27,9 +27,14 @@ type Session = {
   connected: Repo | null;
   mode: string;
   oauth: boolean;
+  github: GitHubAccount | null;
+  installUrl: string | null;
   runs: RequestRow[];
   refresh: () => Promise<void>;
-  connect: (fullName: string) => Promise<void>;
+  connect: (fullName: string, branch?: string) => Promise<void>;
+  disconnect: (fullName: string) => Promise<void>;
+  refreshGithub: () => Promise<void>;
+  disconnectGithub: () => Promise<void>;
 };
 
 const SessionContext = createContext<Session | null>(null);
@@ -48,27 +53,52 @@ export function Shell() {
   const [connected, setConnected] = useState<Repo | null>(null);
   const [mode, setMode] = useState("fixture");
   const [oauth, setOauth] = useState(false);
+  const [github, setGithub] = useState<GitHubAccount | null>(null);
+  const [installUrl, setInstallUrl] = useState<string | null>(null);
   const [runs, setRuns] = useState<RequestRow[]>([]);
   const [menu, setMenu] = useState(false);
   const [palette, setPalette] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);
 
-  const refresh = useCallback(async () => {
-    const [me, repoList, requestList] = await Promise.all([api.me(), api.repos(), api.requests()]);
-    setPrincipal(me);
+  const applyList = useCallback((repoList: Awaited<ReturnType<typeof api.repos>>) => {
     setRepos(repoList.repos);
     setConnected(repoList.connected?.full_name ? repoList.connected : null);
     setMode(repoList.mode);
     setOauth(Boolean(repoList.oauth));
-    setRuns([...requestList].sort((left, right) => right.created_at.localeCompare(left.created_at)));
+    setGithub(repoList.github ?? null);
+    setInstallUrl(repoList.install_url ?? null);
   }, []);
 
-  const connect = useCallback(async (fullName: string) => {
-    const repo = await api.connect(fullName);
-    setConnected(repo);
+  const refresh = useCallback(async () => {
+    const [me, repoList, requestList] = await Promise.all([api.me(), api.repos(), api.requests()]);
+    setPrincipal(me);
+    applyList(repoList);
+    setRuns([...requestList].sort((left, right) => right.created_at.localeCompare(left.created_at)));
+  }, [applyList]);
+
+  const connect = useCallback(async (fullName: string, branch?: string) => {
+    const repo = await api.connect(fullName, branch);
+    setConnected(repo.full_name ? repo : null);
     setConnectOpen(false);
     toast.success(`Connected ${repo.full_name}`);
   }, []);
+
+  const disconnect = useCallback(async (fullName: string) => {
+    await api.disconnectRepo(fullName);
+    setConnected(null);
+    toast.success(`Disconnected ${fullName}`);
+  }, []);
+
+  const refreshGithub = useCallback(async () => {
+    applyList(await api.refreshGithub());
+    toast.success("GitHub repositories refreshed");
+  }, [applyList]);
+
+  const disconnectGithub = useCallback(async () => {
+    await api.disconnectGithub();
+    await refresh();
+    toast.success("Disconnected GitHub");
+  }, [refresh]);
 
   useEffect(() => {
     refresh().catch((err: unknown) => toast.error(err instanceof Error ? err.message : "Could not load the workspace"));
@@ -91,8 +121,22 @@ export function Shell() {
   }, []);
 
   const session = useMemo<Session>(
-    () => ({ principal, repos, connected, mode, oauth, runs, refresh, connect }),
-    [principal, repos, connected, mode, oauth, runs, refresh, connect],
+    () => ({
+      principal,
+      repos,
+      connected,
+      mode,
+      oauth,
+      github,
+      installUrl,
+      runs,
+      refresh,
+      connect,
+      disconnect,
+      refreshGithub,
+      disconnectGithub,
+    }),
+    [principal, repos, connected, mode, oauth, github, installUrl, runs, refresh, connect, disconnect, refreshGithub, disconnectGithub],
   );
 
   return (

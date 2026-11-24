@@ -39,9 +39,17 @@ make doctor
 make up
 ```
 
+## Connect GitHub
+
+1. On GitHub, create a GitHub App. Name the slug you want in the install URL, and set `FACTORY_GITHUB_APP_SLUG` to that slug.
+2. Callback URL: `http://127.0.0.1:43123/auth/github/callback`.
+3. Permissions, and nothing else: Metadata read, Contents write, Pull requests write, Checks read, Statuses read, Actions read. Do not grant Administration, Workflows, Secrets, or Members. The factory never merges.
+4. Copy the App's client id and client secret into `FACTORY_GITHUB_CLIENT_ID` and `FACTORY_GITHUB_CLIENT_SECRET`. Copy the App id and the PEM private key into `FACTORY_GITHUB_APP_ID` and `FACTORY_GITHUB_APP_PRIVATE_KEY`. Set `FACTORY_SECRET_KEY` to a long random string. That key encrypts the GitHub user token at rest.
+5. In the console, choose Connect GitHub. GitHub's login and authorize page opens. After you return, the picker lists the local sample and the repositories the App installation can access. Add repositories opens `https://github.com/apps/<slug>/installations/new`.
+
 ## Going live
 
-1. Create a GitHub App owned by your org. User sign-in is a separate OAuth app: set `FACTORY_GITHUB_CLIENT_ID` and `FACTORY_GITHUB_CLIENT_SECRET`, and set the callback to `http://127.0.0.1:43123/auth/github/callback` (or `FACTORY_GITHUB_REDIRECT_URI`). The App id and private key are what the installation client uses for repository access. The OAuth callback issues a factory session and redirects to `FACTORY_CONSOLE_URL` with `?token=`. Roles come from `FACTORY_ADMIN_USERS` and `FACTORY_APPROVER_USERS` (comma-separated GitHub logins). Everyone else is a requester.
+1. Create one GitHub App. Use that App's client id and client secret for user login, so you do not create a second OAuth app. Set the callback to `http://127.0.0.1:43123/auth/github/callback` (or `FACTORY_GITHUB_REDIRECT_URI`). In the console, Connect GitHub opens GitHub's own authorize page. The callback stores the user token encrypted with `FACTORY_SECRET_KEY` (or `FACTORY_SESSION_SECRET` if that is unset). The token is not sent to the browser. The factory lists repos through `/user/installations` and `/user/installations/{id}/repositories`, so it only sees repositories the App is installed on. Set `FACTORY_GITHUB_APP_ID`, `FACTORY_GITHUB_APP_PRIVATE_KEY`, `FACTORY_GITHUB_APP_SLUG`, `FACTORY_GITHUB_CLIENT_ID`, and `FACTORY_GITHUB_CLIENT_SECRET`. The session redirect goes to `FACTORY_CONSOLE_URL` with `?token=`. Roles come from `FACTORY_ADMIN_USERS` and `FACTORY_APPROVER_USERS` (comma-separated GitHub logins). Everyone else is a requester.
 2. Permissions, and nothing else:
    - Metadata: Read
    - Contents: Read and write

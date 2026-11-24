@@ -1,5 +1,12 @@
 import type { Repo } from "@/lib/types";
 
+export function groupRepos(repos: Repo[]): { local: Repo[]; github: Repo[] } {
+  return {
+    local: repos.filter((repo) => repo.kind !== "github"),
+    github: repos.filter((repo) => repo.kind === "github"),
+  };
+}
+
 export function filterRepos(repos: Repo[], query: string): Repo[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return repos;

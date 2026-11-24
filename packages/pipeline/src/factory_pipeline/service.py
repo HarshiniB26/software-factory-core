@@ -162,6 +162,25 @@ async def tick(request_id: UUID, hint: dict[str, Any] | None = None) -> dict[str
     }
 
 
+async def _github_clone(database: Any, target: str | None) -> tuple[str | None, str | None]:
+    """Installation token for a granted repo. The token is not written to state."""
+    if not target or "/" not in target or target.startswith("/"):
+        return None, None
+    connected = await database.get_state("console.connected_repo") or {}
+    if connected.get("kind") != "github" or connected.get("full_name") != target:
+        return None, None
+    installation = connected.get("installation_id")
+    full_name = connected.get("full_name")
+    if not isinstance(installation, int) or not isinstance(full_name, str):
+        return None, None
+    from factory_vcs_github.install import installation_token  # pyright: ignore[reportMissingTypeStubs]
+
+    token = installation_token(installation)
+    if not token:
+        return None, None
+    return f"https://github.com/{full_name}.git", token
+
+
 def _tool_calls(step: dict[str, Any]) -> list[dict[str, str]]:
     step_id = str(step.get("id") or "implement")
     touch = str((step.get("touch") or ["src/app.py"])[0])
@@ -339,7 +358,15 @@ async def _execute(
     for wave in waves:
 
         async def run_step(step: dict[str, Any]) -> str:
-            handle = await sandbox.create(SandboxSpec(repo=request.target, image="factory"))
+            clone_url, clone_token = await _github_clone(database, request.target)
+            handle = await sandbox.create(
+                SandboxSpec(
+                    repo=None if clone_url else request.target,
+                    image="factory",
+                    clone_url=clone_url,
+                    clone_token=clone_token,
+                )
+            )
             state["sandbox_backend"] = getattr(sandbox, "backend", "fake")
             branch = f"factory/{str(request_id)[:8]}/{step['id']}"
             await sandbox.fetch_branch(handle.id, branch)

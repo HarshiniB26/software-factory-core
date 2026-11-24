@@ -6,7 +6,7 @@ The worker polls Temporal. The API accepts chat requests and signals the workflo
 
 ## GitHub in the composer
 
-The new-issue box sends the connected repository as the request target. `GET /repos` includes `oauth`, which is true only when `FACTORY_GITHUB_CLIENT_ID` and `FACTORY_GITHUB_CLIENT_SECRET` are both set. The Connect GitHub control then goes to `/auth/github/login`. Without those values the console does not open that route. The popover tells the operator to use Settings → GitHub, and the local sample can still be selected. The API does not expose branches, so the composer has no branch control.
+The new-issue box sends the connected repository as the request target. `GET /repos` includes `oauth`, which is true only when `FACTORY_GITHUB_CLIENT_ID` and `FACTORY_GITHUB_CLIENT_SECRET` are both set. Connect GitHub then goes to GitHub's authorize page. The user token is encrypted with `FACTORY_SECRET_KEY` or `FACTORY_SESSION_SECRET` and is not returned to the browser. Granted repos come from the GitHub App installation. `GET /repos/branches` lists branches for a granted repo, and the composer preselects the default branch. Without the OAuth app the popover tells the operator to use Settings → GitHub, and the local sample can still be selected.
 
 ## Kill switch
 

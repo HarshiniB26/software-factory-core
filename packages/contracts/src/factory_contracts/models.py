@@ -337,6 +337,8 @@ class WebhookEvent(BaseModel):
 class SandboxSpec(BaseModel):
     image: str = "fake"
     repo: str | None = None
+    clone_url: str | None = None
+    clone_token: str | None = None
 
 
 class SandboxHandle(BaseModel):

@@ -93,6 +93,8 @@ class DockerEngine:
             f"{host.resolve()}:/work",
         ]
         origin = Path(spec.repo).expanduser() if spec.repo else None
+        if spec.clone_url:
+            origin = None
         if origin is not None and origin.exists():
             if os.getuid() == 0:
                 _share(origin)
@@ -102,7 +104,16 @@ class DockerEngine:
         self._alive[sandbox_id] = name
         self._scan[name] = "/work"
         register(sandbox_id, lambda command, _name=name: self._exec_result(_name, command))
-        if origin is not None and origin.exists():
+        if spec.clone_url:
+            header: list[str] = []
+            if spec.clone_token:
+                header = ["-c", f"http.extraheader=AUTHORIZATION: bearer {spec.clone_token}"]
+            cloned = self._git(
+                name, [*header, "clone", "--depth", "1", spec.clone_url, "/work/repo"]
+            )
+            if cloned.returncode != 0:
+                self._git(name, ["init", "-b", "main", "/work/repo"])
+        elif origin is not None and origin.exists():
             self._git(name, ["clone", "/origin", "/work/repo"])
         else:
             self._git(name, ["init", "-b", "main", "/work/repo"])

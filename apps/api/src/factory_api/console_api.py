@@ -13,6 +13,18 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from factory_api.access import principal_from_access
+from factory_api.github_account import (
+    cached_repos,
+    decrypt_token,
+    forget,
+    github_public,
+    http_client,
+    install_url,
+    list_branches,
+    load,
+    public_repo,
+    remember,
+)
 
 router = APIRouter()
 
@@ -40,6 +52,11 @@ class NewAppBody(BaseModel):
 
 
 class ConnectBody(BaseModel):
+    full_name: str
+    branch: str | None = None
+
+
+class DisconnectBody(BaseModel):
     full_name: str
 
 
@@ -157,30 +174,133 @@ def _github_oauth() -> bool:
     return bool(client_id and client_secret)
 
 
-@router.get("/repos")
-async def repos(request: Request) -> dict[str, Any]:
-    _principal(request)
+def _client(request: Request) -> Any:
+    existing = getattr(request.app.state, "github_http", None)
+    return existing if existing is not None else http_client()
+
+
+async def _repo_payload(request: Request) -> dict[str, Any]:
+    principal = _principal(request)
     database: Database = request.app.state.database
-    catalog = repo_catalog(Settings().repo_root)
+    stored = await load(database, principal.id)
+    github_repos = cached_repos(stored)
+    catalog = [
+        item
+        for item in repo_catalog(Settings().repo_root)
+        if item["kind"] == "local" or not github_repos
+    ]
+    if github_repos:
+        catalog = [item for item in catalog if item["kind"] == "local"] + github_repos
     connected = await database.get_state(CONNECTED_KEY)
+    if isinstance(connected, dict) and connected.get("full_name"):
+        connected = public_repo(connected)
+    else:
+        connected = None
     return {
-        "repos": catalog,
+        "repos": [public_repo(item) for item in catalog],
         "connected": connected,
         "mode": _mode(),
         "oauth": _github_oauth(),
+        "github": github_public(stored),
+        "install_url": install_url(),
     }
+
+
+@router.get("/repos")
+async def repos(request: Request) -> dict[str, Any]:
+    return await _repo_payload(request)
+
+
+@router.get("/repos/github/refresh")
+async def refresh_github(request: Request) -> dict[str, Any]:
+    principal = _principal(request)
+    database: Database = request.app.state.database
+    stored = await load(database, principal.id)
+    if stored is None:
+        raise HTTPException(status_code=404, detail="GitHub is not connected")
+    client = _client(request)
+    owned = client is not getattr(request.app.state, "github_http", None)
+    try:
+        await remember(
+            database,
+            principal.id,
+            decrypt_token(str(stored["token"])),
+            client=client,
+            profile={
+                "login": str(stored.get("login") or ""),
+                "avatar_url": str(stored.get("avatar_url") or ""),
+            },
+        )
+    finally:
+        if owned:
+            await client.aclose()
+    return await _repo_payload(request)
+
+
+@router.get("/repos/branches")
+async def repo_branches(full_name: str, request: Request) -> dict[str, Any]:
+    principal = _principal(request)
+    database: Database = request.app.state.database
+    stored = await load(database, principal.id)
+    if stored is None:
+        raise HTTPException(status_code=404, detail="GitHub is not connected")
+    match = next(
+        (item for item in cached_repos(stored) if item["full_name"] == full_name),
+        None,
+    )
+    if match is None:
+        raise HTTPException(status_code=404, detail="unknown repository")
+    client = _client(request)
+    owned = client is not getattr(request.app.state, "github_http", None)
+    try:
+        names = await list_branches(client, decrypt_token(str(stored["token"])), full_name)
+    finally:
+        if owned:
+            await client.aclose()
+    default = str(match.get("default_branch") or (names[0] if names else "main"))
+    if default not in names:
+        names = [default, *names]
+    return {"branches": names, "default": default}
 
 
 @router.post("/repos/connect")
 async def connect_repo(body: ConnectBody, request: Request) -> dict[str, Any]:
-    _principal(request)
-    catalog = repo_catalog(Settings().repo_root)
-    match = next((item for item in catalog if item["full_name"] == body.full_name), None)
+    database: Database = request.app.state.database
+    payload = await _repo_payload(request)
+    match = next(
+        (item for item in payload["repos"] if item["full_name"] == body.full_name),
+        None,
+    )
     if match is None:
         raise HTTPException(status_code=404, detail="unknown repository")
+    chosen = dict(match)
+    branch = body.branch or chosen.get("default_branch")
+    if isinstance(branch, str) and branch:
+        chosen["branch"] = branch
+    await database.put_state(CONNECTED_KEY, chosen)
+    return public_repo(chosen)
+
+
+@router.post("/repos/disconnect")
+async def disconnect_repo(body: DisconnectBody, request: Request) -> dict[str, Any]:
+    _principal(request)
     database: Database = request.app.state.database
-    await database.put_state(CONNECTED_KEY, match)
-    return match
+    connected = await database.get_state(CONNECTED_KEY) or {}
+    if connected.get("full_name") != body.full_name:
+        raise HTTPException(status_code=404, detail="repository is not connected")
+    await database.put_state(CONNECTED_KEY, {})
+    return {"disconnected": body.full_name}
+
+
+@router.post("/auth/github/disconnect")
+async def disconnect_github(request: Request) -> dict[str, bool]:
+    principal = _principal(request)
+    database: Database = request.app.state.database
+    await forget(database, principal.id)
+    connected = await database.get_state(CONNECTED_KEY) or {}
+    if connected.get("kind") == "github":
+        await database.put_state(CONNECTED_KEY, {})
+    return {"disconnected": True}
 
 
 @router.get("/requests/{request_id}/view")

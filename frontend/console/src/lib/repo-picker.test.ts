@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterRepos, issueTarget } from "./repo-picker";
+import { filterRepos, groupRepos, issueTarget } from "./repo-picker";
 import type { Repo } from "./types";
 
 const repos: Repo[] = [
@@ -26,6 +26,12 @@ describe("composer repository picker", () => {
     expect(filterRepos(repos, "bill").map((repo) => repo.full_name)).toEqual(["acme/billing"]);
     expect(filterRepos(repos, "sample").map((repo) => repo.full_name)).toEqual(["local/sample"]);
     expect(filterRepos(repos, "  ")).toHaveLength(2);
+  });
+
+  it("splits local and GitHub repositories", () => {
+    const grouped = groupRepos(repos);
+    expect(grouped.local.map((repo) => repo.full_name)).toEqual(["local/sample", "acme/billing"]);
+    expect(grouped.github).toEqual([]);
   });
 
   it("uses the checkout path when the repo has one", () => {

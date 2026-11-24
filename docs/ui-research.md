@@ -41,7 +41,7 @@ Studied in public pages, READMEs, and demo transcripts on 23 Nov 2026. Screensho
 - A runs dashboard with status filters, counts, and a cost chart.
 - A registry with versions, held-out scores, and promotion history. Promotion stays a gate, not a button that rewrites `main`.
 - A repositories page for the sample service and GitHub sign-in.
-- The new-issue composer names the repository in the input toolbar, using the same connected repo as the sidebar. Connect GitHub opens OAuth only when the app is configured. Otherwise the popover says so and the local sample stays selectable. There is no branch chip; the API does not list branches.
+- The new-issue composer names the repository in the input toolbar, using the same connected repo as the sidebar. Connect GitHub opens GitHub's authorize page when the App's client id and secret are set. The picker then splits Local and GitHub, shows the signed-in account, and links Add repositories to the App install page. A branch chip uses the default branch from GitHub. Without the OAuth app the popover says so and the local sample stays selectable.
 - Settings for the harness and model of each role, and for when a plan needs approval.
 - A usage page.
 - Dark and light, command palette, skeletons, and short motion.
